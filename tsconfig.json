@@ -1,1 +1,26 @@
-{"compilerOptions":{"target":"ES2022","lib":["ES2022","DOM","DOM.Iterable"],"module":"ESNext","moduleResolution":"Bundler","jsx":"react-jsx","strict":true,"skipLibCheck":true,"resolveJsonModule":true,"allowImportingTsExtensions":true,"noEmit":true,"esModuleInterop":true,"types":["vite/client","node"],"noUnusedLocals":true,"noUnusedParameters":true},"include":["src","shared","mcp","tests","vite.config.ts"]}
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "types": ["vite/client", "node"],
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "paths": {
+      "@parallax/contracts": ["./packages/contracts/src/index.ts"],
+      "@parallax/core": ["./packages/core/src/index.ts"],
+      "@parallax/application": ["./packages/application/src/index.ts"],
+      "@parallax/runtime": ["./packages/runtime/src/index.ts"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}
