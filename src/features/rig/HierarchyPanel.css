@@ -93,3 +93,15 @@
 .tree-item:hover .tree-item__actions {
   opacity: 1;
 }
+
+.badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+}
+
+.badge--success {
+  background: var(--success-muted);
+  color: var(--success);
+}

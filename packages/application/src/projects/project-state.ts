@@ -1,4 +1,5 @@
 import type { Manifest, Revision } from '@parallax/contracts';
+import type { AssetData, SceneData } from './asset-data.js';
 
 /**
  * Listener for project state changes.
@@ -13,17 +14,21 @@ export interface ProjectSnapshot {
   readonly revision: Revision;
   readonly dirty: boolean;
   readonly lastSavedRevision: Revision;
+  readonly assets: ReadonlyMap<string, AssetData>;
+  readonly scenes: ReadonlyMap<string, SceneData>;
 }
 
 /**
  * In-memory project state manager.
- * Maintains the current manifest and revision counter.
+ * Maintains the current manifest, asset data, and revision counter.
  * Does not perform I/O — persistence goes through ports.
  */
 export class ProjectState {
   private manifest: Manifest | null = null;
   private currentRevision: Revision = 0;
   private savedRevision: Revision = 0;
+  private readonly assets = new Map<string, AssetData>();
+  private readonly scenes = new Map<string, SceneData>();
   private readonly listeners: ProjectStateListener[] = [];
 
   /**
@@ -124,6 +129,58 @@ export class ProjectState {
   }
 
   /**
+   * Set asset data in memory.
+   */
+  setAssetData(id: string, data: AssetData): void {
+    this.assets.set(id, data);
+    this.notify();
+  }
+
+  /**
+   * Get asset data by ID.
+   */
+  getAssetData(id: string): AssetData | undefined {
+    return this.assets.get(id);
+  }
+
+  /**
+   * Get all loaded asset data.
+   */
+  getAllAssetData(): readonly AssetData[] {
+    return [...this.assets.values()];
+  }
+
+  /**
+   * Remove asset data by ID.
+   */
+  removeAssetData(id: string): void {
+    this.assets.delete(id);
+    this.notify();
+  }
+
+  /**
+   * Set scene data in memory.
+   */
+  setSceneData(id: string, data: SceneData): void {
+    this.scenes.set(id, data);
+    this.notify();
+  }
+
+  /**
+   * Get scene data by ID.
+   */
+  getSceneData(id: string): SceneData | undefined {
+    return this.scenes.get(id);
+  }
+
+  /**
+   * Get all loaded scene data.
+   */
+  getAllSceneData(): readonly SceneData[] {
+    return [...this.scenes.values()];
+  }
+
+  /**
    * Get a snapshot of the current state.
    */
   getSnapshot(): ProjectSnapshot | null {
@@ -136,6 +193,8 @@ export class ProjectState {
       revision: this.currentRevision,
       dirty: this.isDirty,
       lastSavedRevision: this.savedRevision,
+      assets: new Map(this.assets),
+      scenes: new Map(this.scenes),
     };
   }
 
@@ -146,6 +205,8 @@ export class ProjectState {
     this.manifest = null;
     this.currentRevision = 0;
     this.savedRevision = 0;
+    this.assets.clear();
+    this.scenes.clear();
     this.notify();
   }
 

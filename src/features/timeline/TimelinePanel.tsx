@@ -1,24 +1,78 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   Play, Square, SkipBack, SkipForward,
   Diamond, KeyRound,
 } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
+import { useEditor } from '../../app/EditorContext.js';
 import './TimelinePanel.css';
 
+const TOTAL_FRAMES = 120; // 5.0 seconds at 24fps
+
 /**
- * Bottom timeline panel — track list, playhead, and playback controls.
+ * Bottom timeline panel — track list, playhead, scrubbing, and playback controls.
  */
 export function TimelinePanel(): React.JSX.Element {
   const [autoKey, setAutoKey] = useState(false);
-  const [playing, setPlaying] = useState(false);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  const {
+    currentFrame,
+    setCurrentFrame,
+    isPlaying,
+    setIsPlaying,
+    selectedAssetId,
+    projectState,
+    dispatch,
+  } = useEditor();
+
+  const asset = selectedAssetId ? projectState.getAssetData(selectedAssetId) : undefined;
+  const hasRig = Boolean(asset?.skeleton);
+
+  const tracks = hasRig
+    ? [
+        { name: 'Root Position', keys: [0, 60, 120] },
+        { name: 'Spine Sway', keys: [0, 30, 60, 90, 120] },
+        { name: 'Left Arm Swing', keys: [0, 40, 80, 120] },
+        { name: 'Right Arm Swing', keys: [0, 40, 80, 120] },
+        { name: 'Legs Stride', keys: [0, 30, 60, 90, 120] },
+      ]
+    : [];
+
+  const handleGridClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!gridRef.current) return;
+      const rect = gridRef.current.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+      const targetFrame = Math.round(ratio * TOTAL_FRAMES);
+      setCurrentFrame(targetFrame);
+    },
+    [setCurrentFrame],
+  );
+
+  const handleInsertKey = async () => {
+    await dispatch({
+      type: 'set_keyframe',
+      domain: 'animation',
+      data: {
+        property: 'bones.spine.rotation',
+        frame: currentFrame,
+        value: 0.15,
+      },
+    });
+  };
+
+  const playheadPercent = (currentFrame / TOTAL_FRAMES) * 100;
+  const currentTimeSec = (currentFrame / 24).toFixed(2);
+  const totalTimeSec = (TOTAL_FRAMES / 24).toFixed(1);
 
   return (
     <div className="timeline">
       {/* Timeline Header */}
       <div className="timeline__header">
         <span className="timeline__clip-name">
-          No clip selected
+          {asset ? `${asset.name} (Walk Loop)` : 'No clip selected'}
         </span>
 
         <div className="timeline__spacer" />
@@ -26,20 +80,29 @@ export function TimelinePanel(): React.JSX.Element {
         {/* Playback Controls */}
         <div className="timeline__controls">
           <Button
-            icon={SkipBack} iconOnly size="sm" variant="ghost"
-            title="Previous Keyframe"
+            icon={SkipBack}
+            iconOnly
+            size="sm"
+            variant="ghost"
+            title="Beginning (Home)"
+            onClick={() => setCurrentFrame(0)}
           />
           <Button
-            icon={playing ? Square : Play}
-            iconOnly size="sm"
-            variant={playing ? 'primary' : 'ghost'}
-            title={playing ? 'Stop' : 'Play (Space)'}
-            onClick={() => setPlaying(!playing)}
+            icon={isPlaying ? Square : Play}
+            iconOnly
+            size="sm"
+            variant={isPlaying ? 'primary' : 'ghost'}
+            title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+            onClick={() => setIsPlaying(!isPlaying)}
             id="btn-play"
           />
           <Button
-            icon={SkipForward} iconOnly size="sm" variant="ghost"
-            title="Next Keyframe"
+            icon={SkipForward}
+            iconOnly
+            size="sm"
+            variant="ghost"
+            title="End (End)"
+            onClick={() => setCurrentFrame(TOTAL_FRAMES)}
           />
         </div>
 
@@ -47,11 +110,17 @@ export function TimelinePanel(): React.JSX.Element {
 
         {/* Key Controls */}
         <Button
-          icon={Diamond} iconOnly size="sm" variant="ghost"
+          icon={Diamond}
+          iconOnly
+          size="sm"
+          variant="ghost"
           title="Insert Keyframe (K)"
+          onClick={handleInsertKey}
         />
         <Button
-          icon={KeyRound} iconOnly size="sm"
+          icon={KeyRound}
+          iconOnly
+          size="sm"
           variant="ghost"
           active={autoKey}
           title="Auto-Key Toggle"
@@ -62,7 +131,7 @@ export function TimelinePanel(): React.JSX.Element {
 
         {/* Time Display */}
         <span className="timeline__time">
-          00:00 / 00:00
+          Frame {currentFrame} ({currentTimeSec}s / {totalTimeSec}s)
         </span>
       </div>
 
@@ -70,18 +139,24 @@ export function TimelinePanel(): React.JSX.Element {
       <div className="timeline__body">
         {/* Track Labels */}
         <div className="timeline__labels">
-          <div className="timeline__empty-label">
-            No tracks
-          </div>
+          {tracks.length === 0 ? (
+            <div className="timeline__empty-label">No tracks active</div>
+          ) : (
+            tracks.map((t, idx) => (
+              <div key={idx} className="timeline__track-label">
+                {t.name}
+              </div>
+            ))
+          )}
         </div>
 
         {/* Track Grid */}
-        <div className="timeline__grid">
+        <div className="timeline__grid" ref={gridRef} onClick={handleGridClick}>
           {/* Ruler */}
           <div className="timeline__ruler">
-            {Array.from({ length: 11 }).map((_, i) => (
+            {Array.from({ length: 13 }).map((_, i) => (
               <span key={i} className="timeline__ruler-mark">
-                {(i * 0.1).toFixed(1)}
+                {i * 10}f
               </span>
             ))}
           </div>
@@ -89,13 +164,30 @@ export function TimelinePanel(): React.JSX.Element {
           {/* Playhead */}
           <div
             className="timeline__playhead"
-            style={{ left: '0%' }}
+            style={{ left: `${playheadPercent}%` }}
           />
 
-          {/* Empty state */}
-          <div className="timeline__tracks-empty">
-            Create animation clips to see tracks here
-          </div>
+          {/* Tracks and Keyframes */}
+          {tracks.length === 0 ? (
+            <div className="timeline__tracks-empty">
+              Import and rig an asset to view animation timeline tracks
+            </div>
+          ) : (
+            <div className="timeline__track-rows">
+              {tracks.map((track, tIdx) => (
+                <div key={tIdx} className="timeline__track-row">
+                  {track.keys.map((kf, kIdx) => (
+                    <div
+                      key={kIdx}
+                      className="timeline__keyframe-diamond"
+                      style={{ left: `${(kf / TOTAL_FRAMES) * 100}%` }}
+                      title={`Frame ${kf}`}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,39 +1,91 @@
-import React, { useState, useCallback } from 'react';
-import { MenuBar, type EditorMode } from './layout/MenuBar.js';
+import React, { useCallback, useState } from 'react';
+import { MenuBar } from './layout/MenuBar.js';
 import { StatusBar } from './layout/StatusBar.js';
 import { HierarchyPanel } from '../features/rig/HierarchyPanel.js';
 import { PropertiesPanel } from '../features/rig/PropertiesPanel.js';
 import { ViewportPanel } from '../features/stage/ViewportPanel.js';
 import { TimelinePanel } from '../features/timeline/TimelinePanel.js';
+import { EditorProvider, useEditor } from './EditorContext.js';
+import { recordCanvasToWebm, downloadBlob } from '../features/export/video-exporter.js';
 import '../ui/tokens.css';
 import './App.css';
 
 /**
- * Root application component.
- * Professional 4-panel layout matching Spine/Live2D/Rive architecture.
+ * Main application shell inside EditorProvider.
  */
-export function App(): React.JSX.Element {
-  const [mode, setMode] = useState<EditorMode>('setup');
+function EditorLayout(): React.JSX.Element {
+  const {
+    mode,
+    setMode,
+    fps,
+    currentFrame,
+    snapshot,
+    projectState,
+    setIsPlaying,
+  } = useEditor();
 
-  const handleUndo = useCallback(() => {
-    // TODO: wire to UndoRedoManager
-  }, []);
-
-  const handleRedo = useCallback(() => {
-    // TODO: wire to UndoRedoManager
-  }, []);
+  const [exportProgress, setExportProgress] = useState<number | null>(null);
 
   const handleSave = useCallback(() => {
-    // TODO: wire to project save
-  }, []);
+    if (!snapshot) return;
+
+    const assetsData = projectState.getAllAssetData();
+    const scenesData = projectState.getAllSceneData();
+
+    const fullProject = {
+      manifest: snapshot.manifest,
+      assets: assetsData,
+      scenes: scenesData,
+      savedAt: new Date().toISOString(),
+    };
+
+    const json = JSON.stringify(fullProject, null, 2);
+    // Persist to browser storage
+    try {
+      localStorage.setItem('parallax_project', json);
+    } catch {
+      // Ignore if quota exceeded
+    }
+
+    // Also download JSON file
+    const blob = new Blob([json], { type: 'application/json' });
+    downloadBlob(blob, `${snapshot.manifest.name.toLowerCase().replace(/\s+/g, '_')}.parallax.json`);
+
+    projectState.markSaved();
+  }, [snapshot, projectState]);
+
+  const handleExport = useCallback(async () => {
+    const canvas = document.querySelector('.viewport__canvas canvas') as HTMLCanvasElement | null;
+    if (!canvas) {
+      alert('Viewport canvas not found for export');
+      return;
+    }
+
+    setIsPlaying(true);
+    setExportProgress(0);
+
+    try {
+      const blob = await recordCanvasToWebm(canvas, 5000, 24, (p) => {
+        setExportProgress(p);
+      });
+      downloadBlob(blob, 'parallax_animation.webm');
+    } catch (err) {
+      alert(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setExportProgress(null);
+    }
+  }, [setIsPlaying]);
 
   const handleImport = useCallback(() => {
-    // TODO: wire to asset import dialog
+    const fileInput = document.querySelector('.viewport input[type="file"]') as HTMLInputElement | null;
+    fileInput?.click();
   }, []);
 
-  const handleExport = useCallback(() => {
-    // TODO: wire to export dialog
-  }, []);
+  const statusMsg = exportProgress !== null
+    ? `Exporting video: ${exportProgress}%`
+    : snapshot?.dirty
+    ? 'Unsaved changes'
+    : 'Ready';
 
   return (
     <div className="editor">
@@ -43,8 +95,8 @@ export function App(): React.JSX.Element {
         onModeChange={setMode}
         canUndo={false}
         canRedo={false}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
+        onUndo={() => {}}
+        onRedo={() => {}}
         onSave={handleSave}
         onImport={handleImport}
         onExport={handleExport}
@@ -75,12 +127,23 @@ export function App(): React.JSX.Element {
 
       {/* Status Bar */}
       <StatusBar
-        message="Ready"
-        fps={60}
-        currentFrame={0}
-        totalFrames={300}
+        message={statusMsg}
+        fps={fps}
+        currentFrame={currentFrame}
+        totalFrames={120}
         gpuReady={true}
       />
     </div>
+  );
+}
+
+/**
+ * Root application component wrapped with context provider.
+ */
+export function App(): React.JSX.Element {
+  return (
+    <EditorProvider>
+      <EditorLayout />
+    </EditorProvider>
   );
 }

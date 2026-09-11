@@ -1,0 +1,53 @@
+/* ── Slider Component Styles ── */
+
+.slider-container {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+}
+
+.slider-container__label {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  min-width: 48px;
+  flex-shrink: 0;
+}
+
+.slider-input {
+  flex: 1;
+  height: 4px;
+  appearance: none;
+  background: var(--bg-surface);
+  border-radius: var(--radius-full);
+  outline: none;
+  cursor: pointer;
+}
+
+.slider-input::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.slider-input::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.slider-container__value {
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  min-width: 36px;
+  text-align: right;
+}
+
+.slider-container--disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}

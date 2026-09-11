@@ -15,6 +15,7 @@ export type {
 } from './commands/command-bus.js';
 export { CommandRegistry } from './commands/command-registry.js';
 export type { HandlerRegistration } from './commands/command-registry.js';
+export { registerDefaultHandlers } from './commands/handlers/register-handlers.js';
 
 // History
 export { UndoRedoManager } from './history/undo-redo.js';
@@ -28,6 +29,7 @@ export type {
   ProjectSnapshot,
   ProjectStateListener,
 } from './projects/project-state.js';
+export type { AssetData, SceneData } from './projects/asset-data.js';
 
 // Jobs
 export { JobQueue } from './jobs/job-queue.js';
