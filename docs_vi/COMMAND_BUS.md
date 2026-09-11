@@ -281,8 +281,8 @@ Inverse execution failure là trường hợp nghiêm trọng nhất. Cần:
 
 ## 11. Liên kết
 
-- [PLAN.vi.md](PLAN.vi.md) mục 5 — command bus là trung tâm
-- [PROJECT_FORMAT.vi.md](PROJECT_FORMAT.vi.md) — revision trong manifest
-- [MODULE_MAP.vi.md](MODULE_MAP.vi.md) — `packages/application/src/commands/`,
+- [PLAN.md](PLAN.md) mục 5 — command bus là trung tâm
+- [PROJECT_FORMAT.md](PROJECT_FORMAT.md) — revision trong manifest
+- [MODULE_MAP.md](MODULE_MAP.md) — `packages/application/src/commands/`,
   `packages/application/src/history/`
-- [CODING_RULES.vi.md](CODING_RULES.vi.md) mục 5 — ranh giới module
+- [CODING_RULES.md](CODING_RULES.md) mục 5 — ranh giới module

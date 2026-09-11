@@ -87,7 +87,7 @@ Trước khi viết, dùng `rg` tìm implementation, hành vi và caller tương
 | MCP schema mapping/tool handler | `apps/mcp/src/tools/` |
 | File, process và service adapter | `apps/service/src/adapters/` |
 
-Quan hệ phụ thuộc nằm trong [module map](MODULE_MAP.vi.md). Đây là đường dẫn đề xuất;
+Quan hệ phụ thuộc nằm trong [module map](MODULE_MAP.md). Đây là đường dẫn đề xuất;
 không tạo folder rỗng hoặc di chuyển file khi nhiệm vụ chỉ là lập kế hoạch.
 
 ## 4. Không trùng lặp nghiệp vụ

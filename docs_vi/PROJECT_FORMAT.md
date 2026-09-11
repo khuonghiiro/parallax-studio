@@ -151,7 +151,7 @@ Invariant:
 
 ### Landmarks
 
-Dùng cho quy trình Auto-Rig (Mixamo-style, xem [AUTO_RIG.vi.md](AUTO_RIG.vi.md)):
+Dùng cho quy trình Auto-Rig (Mixamo-style, xem [AUTO_RIG.md](AUTO_RIG.md)):
 
 ```jsonc
 {
@@ -258,7 +258,7 @@ Dùng cho quy trình Auto-Rig (Mixamo-style, xem [AUTO_RIG.vi.md](AUTO_RIG.vi.md
 ```
 
 Thời gian trong timeline luôn tính bằng giây. Chuyển sang frame index dùng
-`frameIndex = time × fps`. Xem [RENDER_PROFILES.vi.md](RENDER_PROFILES.vi.md) cho
+`frameIndex = time × fps`. Xem [RENDER_PROFILES.md](RENDER_PROFILES.md) cho
 ba loại FPS và cách lấy mẫu.
 
 ## 6. Lưu và mở project
@@ -294,9 +294,9 @@ ba loại FPS và cách lấy mẫu.
 
 ## 8. Liên kết
 
-- [PLAN.vi.md](PLAN.vi.md) mục 5, 7 — yêu cầu project format
-- [COMMAND_BUS.vi.md](COMMAND_BUS.vi.md) — cách revision và undo tương tác với lưu project
-- [MODULE_MAP.vi.md](MODULE_MAP.vi.md) — `packages/contracts/src/` sở hữu schema,
+- [PLAN.md](PLAN.md) mục 5, 7 — yêu cầu project format
+- [COMMAND_BUS.md](COMMAND_BUS.md) — cách revision và undo tương tác với lưu project
+- [MODULE_MAP.md](MODULE_MAP.md) — `packages/contracts/src/` sở hữu schema,
   `apps/service/src/adapters/persistence/` sở hữu I/O
-- [AUTO_RIG.vi.md](AUTO_RIG.vi.md) — chi tiết landmarks và auto-rig format
-- [UI_SPECIFICATION.vi.md](UI_SPECIFICATION.vi.md) — tương tác UI với cấu trúc project
+- [AUTO_RIG.md](AUTO_RIG.md) — chi tiết landmarks và auto-rig format
+- [UI_SPECIFICATION.md](UI_SPECIFICATION.md) — tương tác UI với cấu trúc project

@@ -158,7 +158,7 @@ Không xuất toàn bộ internal qua barrel gây vòng import hoặc khó tree-
 - `application/images/` sở hữu yêu cầu sinh ảnh, nhập kết quả và idempotency.
 - `image-handoff/` xử lý truyền file/metadata theo port; không nhúng model sinh ảnh.
 - MCP chỉ chuyển command; công cụ sinh ảnh chạy phía Codex/Antigravity.
-- Chi tiết nằm trong [IMAGE_WORKFLOW.vi.md](IMAGE_WORKFLOW.vi.md).
+- Chi tiết nằm trong [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md).
 
 ### Export 2K/4K, 60/120 FPS
 
@@ -166,7 +166,7 @@ Không xuất toàn bộ internal qua barrel gây vòng import hoặc khó tree-
 - `core/animation/` lấy pose theo thời gian, độc lập preview/output FPS.
 - `runtime/export/` render frame; `service/adapters/encoding/` xử lý NVENC/FFmpeg.
 - Không hard-code một danh sách resolution/FPS riêng trong UI, MCP và backend.
-- Chi tiết nằm trong [RENDER_PROFILES.vi.md](RENDER_PROFILES.vi.md).
+- Chi tiết nằm trong [RENDER_PROFILES.md](RENDER_PROFILES.md).
 
 ## Ánh xạ từ mã nháp
 
@@ -186,12 +186,12 @@ Không di chuyển, sửa hoặc xóa các file trên trong lượt chỉ yêu c
 
 ## Liên kết
 
-- [PLAN.vi.md](PLAN.vi.md) — kế hoạch sản phẩm
-- [CODING_RULES.vi.md](CODING_RULES.vi.md) — quy tắc mã nguồn
-- [COMMAND_BUS.vi.md](COMMAND_BUS.vi.md) — command bus sử dụng application module
-- [DEFORMATION_PIPELINE.vi.md](DEFORMATION_PIPELINE.vi.md) — pipeline dùng core/runtime
-- [MCP_TOOLS.vi.md](MCP_TOOLS.vi.md) — MCP tools mapping sang application commands
-- [PROJECT_FORMAT.vi.md](PROJECT_FORMAT.vi.md) — schema dữ liệu từ contracts
-- [UI_SPECIFICATION.vi.md](UI_SPECIFICATION.vi.md) — thiết kế UI và icon system
-- [AUTO_RIG.vi.md](AUTO_RIG.vi.md) — auto-rig pipeline và landmark detection
-- [IMAGE_WORKFLOW.vi.md](IMAGE_WORKFLOW.vi.md) — quy trình tạo ảnh và tách layer AI
+- [PLAN.md](PLAN.md) — kế hoạch sản phẩm
+- [CODING_RULES.md](CODING_RULES.md) — quy tắc mã nguồn
+- [COMMAND_BUS.md](COMMAND_BUS.md) — command bus sử dụng application module
+- [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) — pipeline dùng core/runtime
+- [MCP_TOOLS.md](MCP_TOOLS.md) — MCP tools mapping sang application commands
+- [PROJECT_FORMAT.md](PROJECT_FORMAT.md) — schema dữ liệu từ contracts
+- [UI_SPECIFICATION.md](UI_SPECIFICATION.md) — thiết kế UI và icon system
+- [AUTO_RIG.md](AUTO_RIG.md) — auto-rig pipeline và landmark detection
+- [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) — quy trình tạo ảnh và tách layer AI

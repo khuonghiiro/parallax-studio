@@ -20,8 +20,8 @@ gian 3D không yêu cầu người dùng dựng hay nhập model 3D hoàn chỉn
 
 Yêu cầu bổ sung đã nhận: dùng công cụ tạo ảnh sẵn có của Codex/Antigravity rồi
 nhập kết quả qua MCP; xuất phim 60/120 FPS ở 2K/4K. GPU mục tiêu người dùng cung cấp
-là NVIDIA RTX 3060 12 GB VRAM. Chi tiết được tách thành [luồng tạo ảnh](IMAGE_WORKFLOW.vi.md)
-và [profile render](RENDER_PROFILES.vi.md).
+là NVIDIA RTX 3060 12 GB VRAM. Chi tiết được tách thành [luồng tạo ảnh](IMAGE_WORKFLOW.md)
+và [profile render](RENDER_PROFILES.md).
 
 ## 2. Cơ chế nhiều góc nhìn từ ảnh
 
@@ -47,7 +47,7 @@ Live2D mô tả mesh deformation và deformer cho quay mặt/cử động; Spine
 skinning theo trọng số. Đây là nguồn tham khảo cơ chế, không phải dependency
 bắt buộc. [Live2D deformers][live2d], [Spine weights][spine-weights].
 Cơ chế auto-rig (landmarks, auto-skeleton, auto-weights) và mesh topology
-được quy định chi tiết tại [AUTO_RIG.vi.md](AUTO_RIG.vi.md).
+được quy định chi tiết tại [AUTO_RIG.md](AUTO_RIG.md).
 
 ### Bộ góc nhìn
 
@@ -76,7 +76,7 @@ là tính năng sau, không thay thế bộ góc nhìn.
 
 | Thành phần | Lựa chọn | Phạm vi |
 | --- | --- | --- |
-| UI | React + TypeScript + Lucide Icons | Asset editor, rig editor, timeline và inspector ([chi tiết UI](UI_SPECIFICATION.vi.md)) |
+| UI | React + TypeScript + Lucide Icons | Asset editor, rig editor, timeline và inspector ([chi tiết UI](UI_SPECIFICATION.md)) |
 | Render | Three.js, WebGL2 trước | Mesh phẳng có xương, camera, material và bóng |
 | Tam giác hóa | Earcut | Tam giác hóa contour đã kiểm tra |
 | PSD | ag-psd, tùy chọn | Layer trong phạm vi thư viện hỗ trợ; PNG chia lớp được ưu tiên |
@@ -151,15 +151,15 @@ hai nhóm công cụ trong một tác vụ; nếu thiếu công cụ tạo ảnh
 được file thì báo đúng trạng thái. Luồng chạy từ yêu cầu trong Codex/Antigravity;
 nút tạo ảnh trong UI không được giả lập rằng đã khởi chạy một agent bên ngoài.
 Không cần người dùng cấu hình thêm model/API sinh ảnh trong app.
-[Chi tiết luồng, truyền file và nghiệm thu](IMAGE_WORKFLOW.vi.md).
+[Chi tiết luồng, truyền file và nghiệm thu](IMAGE_WORKFLOW.md).
 
 Project lưu manifest có phiên bản, asset source, các view, rig, material và clips.
 Texture atlas/thumbnail là cache tạo lại được; scene instance tham chiếu asset ID.
 Chốt schema chi tiết ở mốc 0 để tránh khóa cứng định dạng trước thử nghiệm.
-[Chi tiết schema và cấu trúc project](PROJECT_FORMAT.vi.md).
-[Kiến trúc command bus và undo/redo](COMMAND_BUS.vi.md).
-[Catalog MCP tools](MCP_TOOLS.vi.md).
-[Thiết kế giao diện và hệ thống icon](UI_SPECIFICATION.vi.md).
+[Chi tiết schema và cấu trúc project](PROJECT_FORMAT.md).
+[Kiến trúc command bus và undo/redo](COMMAND_BUS.md).
+[Catalog MCP tools](MCP_TOOLS.md).
+[Thiết kế giao diện và hệ thống icon](UI_SPECIFICATION.md).
 
 ## 6. Preview và export
 
@@ -170,7 +170,7 @@ Chốt schema chi tiết ở mốc 0 để tránh khóa cứng định dạng tr
   nhân đôi frame 60 FPS để gọi là render 120 FPS.
 - Thứ tự contract: chọn view → warp/morph ở rest space → bone skinning →
   instance transform → camera/shadow/render; thứ tự này phải có test.
-  [Chi tiết pipeline biến dạng](DEFORMATION_PIPELINE.vi.md).
+  [Chi tiết pipeline biến dạng](DEFORMATION_PIPELINE.md).
 - Renderer gửi frame theo pipeline có bộ đệm giới hạn sang FFmpeg; hiển thị progress,
   lỗi và hủy job. Mỗi job gắn với snapshot revision.
 - Ưu tiên H.264/HEVC qua NVENC khi driver và bản FFmpeg hỗ trợ. Probe encoder thực tế
@@ -183,7 +183,7 @@ Chốt schema chi tiết ở mốc 0 để tránh khóa cứng định dạng tr
 
 4K/120 FPS là yêu cầu chất lượng đầu ra; không đồng nghĩa mọi cảnh phải preview
 hoặc render nhanh hơn thời gian thực. Dựng offline theo frame vẫn giữ đúng FPS.
-Preset, memory budget và ma trận nghiệm thu nằm trong [RENDER_PROFILES.vi.md](RENDER_PROFILES.vi.md).
+Preset, memory budget và ma trận nghiệm thu nằm trong [RENDER_PROFILES.md](RENDER_PROFILES.md).
 
 ## 7. Mốc triển khai và nghiệm thu
 
@@ -207,11 +207,11 @@ Test quan trọng: weights chuẩn hóa; xương không chu kỳ; giới hạn I
 chuyển view/topology; mask/shadow theo pose; preview/export cùng thời gian;
 UI/MCP cùng state; lưu và undo nguyên tử; ảnh nhập là kết quả thật của tool;
 output 60/120 FPS đúng frame count/timestamp, không giảm chất lượng âm thầm.
-[Chiến lược kiểm thử](TESTING_STRATEGY.vi.md).
+[Chiến lược kiểm thử](TESTING_STRATEGY.md).
 
 ## 8. Quy tắc code và AI
 
-Chi tiết: [CODING_RULES.vi.md](CODING_RULES.vi.md), [MODULE_MAP.vi.md](MODULE_MAP.vi.md).
+Chi tiết: [CODING_RULES.md](CODING_RULES.md), [MODULE_MAP.md](MODULE_MAP.md).
 Quy tắc code người dùng đã yêu cầu có hiệu lực độc lập với duyệt kiến trúc.
 
 - Tối đa 800 dòng vật lý mỗi file source, gồm comment và dòng trống.

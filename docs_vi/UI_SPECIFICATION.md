@@ -757,10 +757,10 @@ AI tạo SVG inline theo quy tắc:
 
 ## 12. Liên kết
 
-- [PLAN.vi.md](PLAN.vi.md) — scope sản phẩm
-- [COMMAND_BUS.vi.md](COMMAND_BUS.vi.md) — command bus mà UI gọi
-- [MCP_TOOLS.vi.md](MCP_TOOLS.vi.md) — MCP tools tương ứng UI actions
-- [MODULE_MAP.vi.md](MODULE_MAP.vi.md) — `apps/editor/` module
-- [AUTO_RIG.vi.md](AUTO_RIG.vi.md) — auto-rig workflow trong UI
-- [IMAGE_WORKFLOW.vi.md](IMAGE_WORKFLOW.vi.md) — luồng tạo ảnh
-- [DEFORMATION_PIPELINE.vi.md](DEFORMATION_PIPELINE.vi.md) — viewport render pipeline
+- [PLAN.md](PLAN.md) — scope sản phẩm
+- [COMMAND_BUS.md](COMMAND_BUS.md) — command bus mà UI gọi
+- [MCP_TOOLS.md](MCP_TOOLS.md) — MCP tools tương ứng UI actions
+- [MODULE_MAP.md](MODULE_MAP.md) — `apps/editor/` module
+- [AUTO_RIG.md](AUTO_RIG.md) — auto-rig workflow trong UI
+- [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) — luồng tạo ảnh
+- [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) — viewport render pipeline

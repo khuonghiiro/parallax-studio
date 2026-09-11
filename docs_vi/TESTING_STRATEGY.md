@@ -267,7 +267,7 @@ Theo PLAN mục 7:
 - Clone detector (jscpd hoặc tương đương).
 - CI runner (GitHub Actions / GitLab CI).
 
-Xem [CODING_RULES.vi.md](CODING_RULES.vi.md) mục 6 cho danh sách đầy đủ gate dự kiến.
+Xem [CODING_RULES.md](CODING_RULES.md) mục 6 cho danh sách đầy đủ gate dự kiến.
 
 ## 6. Cross-platform testing
 
@@ -329,9 +329,9 @@ Test dài chia theo test case, không dồn vào một file.
 
 ## 8. Liên kết
 
-- [PLAN.vi.md](PLAN.vi.md) mục 7 — mốc nghiệm thu và test quan trọng
-- [RENDER_PROFILES.vi.md](RENDER_PROFILES.vi.md) mục 6 — tiêu chí chấp nhận render
-- [CODING_RULES.vi.md](CODING_RULES.vi.md) mục 6 — gate tự động
-- [DEFORMATION_PIPELINE.vi.md](DEFORMATION_PIPELINE.vi.md) mục 7 — test contract
-- [COMMAND_BUS.vi.md](COMMAND_BUS.vi.md) — test undo/redo và batch
-- [IMAGE_WORKFLOW.vi.md](IMAGE_WORKFLOW.vi.md) — luồng tách thành phần và tạo bộ góc
+- [PLAN.md](PLAN.md) mục 7 — mốc nghiệm thu và test quan trọng
+- [RENDER_PROFILES.md](RENDER_PROFILES.md) mục 6 — tiêu chí chấp nhận render
+- [CODING_RULES.md](CODING_RULES.md) mục 6 — gate tự động
+- [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) mục 7 — test contract
+- [COMMAND_BUS.md](COMMAND_BUS.md) — test undo/redo và batch
+- [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) — luồng tách thành phần và tạo bộ góc

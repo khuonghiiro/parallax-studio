@@ -246,8 +246,8 @@ Các invariant phải được kiểm tra:
 
 ## 9. Liên kết
 
-- [PLAN.vi.md](PLAN.vi.md) mục 2, 4, 6 — cơ chế deformation và yêu cầu
-- [MODULE_MAP.vi.md](MODULE_MAP.vi.md) — `core/deformation/`, `core/rig/`,
+- [PLAN.md](PLAN.md) mục 2, 4, 6 — cơ chế deformation và yêu cầu
+- [MODULE_MAP.md](MODULE_MAP.md) — `core/deformation/`, `core/rig/`,
   `core/geometry/`, `runtime/meshes/`
-- [RENDER_PROFILES.vi.md](RENDER_PROFILES.vi.md) — FPS lấy mẫu và chất lượng
-- [COMMAND_BUS.vi.md](COMMAND_BUS.vi.md) — command điều khiển pose/rig
+- [RENDER_PROFILES.md](RENDER_PROFILES.md) — FPS lấy mẫu và chất lượng
+- [COMMAND_BUS.md](COMMAND_BUS.md) — command điều khiển pose/rig

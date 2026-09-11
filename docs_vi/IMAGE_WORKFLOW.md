@@ -39,7 +39,7 @@ khởi chạy agent được hỗ trợ, UI phải ghi đang chờ agent; không
 - Phân biệt màu/alpha của artwork với normal map hoặc shadow của scene.
 - **Rig-Ready Template** (nếu có): skeleton type, pose chuẩn (T-pose/A-pose),
   tỷ lệ cơ thể, promptHint tự động bổ sung vào prompt AI. Khi tạo ảnh theo
-  template, auto-rig áp ngay sau import. Xem [AUTO_RIG.vi.md](AUTO_RIG.vi.md)
+  template, auto-rig áp ngay sau import. Xem [AUTO_RIG.md](AUTO_RIG.md)
   mục 2.4 cho schema và bộ templates mặc định.
 
 Brief yêu cầu ánh sáng phẳng khi cần relight về sau; hạn chế bóng nền đã vẽ sẵn.
@@ -259,7 +259,7 @@ sửa nếu style lệch nhau.
   kẹp phía sau nhìn từ side". Kiểm tra visual consistency.
 
 **Vấn đề 4: Topology không tương thích giữa views.**
-- Xem [DEFORMATION_PIPELINE.vi.md](DEFORMATION_PIPELINE.vi.md) mục 2 bước 2:
+- Xem [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) mục 2 bước 2:
   morph chỉ hoạt động khi topology tương thích. Nếu khác topology → chuyển view
   rời rạc tại mốc thời gian phù hợp, không nội suy vertex.
 

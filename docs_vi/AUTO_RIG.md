@@ -687,7 +687,7 @@ Agent nhận yêu cầu: "Tạo nhân vật đi bộ"
 
 ## 8. MCP tools cho auto-rig
 
-Đây là các tool mới bổ sung vào [MCP_TOOLS.vi.md](MCP_TOOLS.vi.md):
+Đây là các tool mới bổ sung vào [MCP_TOOLS.md](MCP_TOOLS.md):
 
 | Tool | Loại | Mô tả |
 | --- | --- | --- |
@@ -716,9 +716,9 @@ Agent nhận yêu cầu: "Tạo nhân vật đi bộ"
 
 ## 10. Liên kết
 
-- [IMAGE_WORKFLOW.vi.md](IMAGE_WORKFLOW.vi.md) mục 6–8 — tách layers, mesh, AI pipeline
-- [DEFORMATION_PIPELINE.vi.md](DEFORMATION_PIPELINE.vi.md) — thứ tự deformation
-- [MCP_TOOLS.vi.md](MCP_TOOLS.vi.md) — catalog tools (bao gồm auto-rig tools)
-- [PROJECT_FORMAT.vi.md](PROJECT_FORMAT.vi.md) — rig data format
-- [PLAN.vi.md](PLAN.vi.md) mục 2 — cơ chế nhiều góc nhìn từ ảnh
-- [GLOSSARY.vi.md](GLOSSARY.vi.md) — thuật ngữ: bone, weights, landmark, rest pose
+- [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) mục 6–8 — tách layers, mesh, AI pipeline
+- [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) — thứ tự deformation
+- [MCP_TOOLS.md](MCP_TOOLS.md) — catalog tools (bao gồm auto-rig tools)
+- [PROJECT_FORMAT.md](PROJECT_FORMAT.md) — rig data format
+- [PLAN.md](PLAN.md) mục 2 — cơ chế nhiều góc nhìn từ ảnh
+- [GLOSSARY.md](GLOSSARY.md) — thuật ngữ: bone, weights, landmark, rest pose

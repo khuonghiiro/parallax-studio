@@ -12,12 +12,12 @@ to implement features when the user only asked for a plan.
 
 Resolve paths from the repository root, not the skill directory:
 
-- Read `AGENTS.md` and `docs/CODING_RULES.vi.md` before source changes.
-- Read `docs/MODULE_MAP.vi.md` to identify the owner and allowed dependencies.
-- Read the relevant section of `docs/PLAN.vi.md` for the current product direction.
-- For AI-created assets, read `docs/IMAGE_WORKFLOW.vi.md`: the client generates
+- Read `AGENTS.md` and `docs/CODING_RULES.md` before source changes.
+- Read `docs/MODULE_MAP.md` to identify the owner and allowed dependencies.
+- Read the relevant section of `docs/PLAN.md` for the current product direction.
+- For AI-created assets, read `docs/IMAGE_WORKFLOW.md`: the client generates
   images, and MCP ingests real artifacts; do not add a default local model service.
-- For rendering, read `docs/RENDER_PROFILES.vi.md`: 2K/4K at 60/120 output FPS,
+- For rendering, read `docs/RENDER_PROFILES.md`: 2K/4K at 60/120 output FPS,
   RTX 3060 12 GB target, bounded buffers and shared deterministic sampling.
 
 The current design is image-based: layered artwork, flat meshes, bones, deformers,

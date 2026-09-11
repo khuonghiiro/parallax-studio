@@ -94,7 +94,7 @@ quanh mắt cho biểu cảm, giảm density ở vùng ít chuyển động), r�
 | `rig.get_rig_template` | read | Chi tiết template: proportions, landmarks, prompt |
 | `rig.apply_rig_template` | write | Áp template lên ảnh: tính landmarks + skeleton + weights |
 
-Chi tiết cơ chế auto-rig và Rig-Ready Template: [AUTO_RIG.vi.md](AUTO_RIG.vi.md).
+Chi tiết cơ chế auto-rig và Rig-Ready Template: [AUTO_RIG.md](AUTO_RIG.md).
 
 ### 3.5 Animation
 
@@ -110,7 +110,7 @@ Chi tiết cơ chế auto-rig và Rig-Ready Template: [AUTO_RIG.vi.md](AUTO_RIG.
 | `animation.apply_template` | write | Áp template lên skeleton hiện tại |
 | `animation.adjust_template` | write | Sửa keyframes của template đã áp |
 
-Animation templates và retarget: [AUTO_RIG.vi.md](AUTO_RIG.vi.md) mục 6.
+Animation templates và retarget: [AUTO_RIG.md](AUTO_RIG.md) mục 6.
 
 
 ### 3.6 Scene
@@ -267,7 +267,7 @@ Agent có thể gửi nhiều command trong một lần gọi tool đặc biệt
 }
 ```
 
-Batch thực hiện nguyên tử qua command bus (xem [COMMAND_BUS.vi.md](COMMAND_BUS.vi.md)).
+Batch thực hiện nguyên tử qua command bus (xem [COMMAND_BUS.md](COMMAND_BUS.md)).
 
 ## 9. Luồng dựng phim hoàn chỉnh từ MCP
 
@@ -302,7 +302,7 @@ Batch thực hiện nguyên tử qua command bus (xem [COMMAND_BUS.vi.md](COMMAN
 
 ## 10. Liên kết
 
-- [PLAN.vi.md](PLAN.vi.md) mục 5 — AI/MCP và dữ liệu chung
-- [IMAGE_WORKFLOW.vi.md](IMAGE_WORKFLOW.vi.md) — luồng tạo ảnh chi tiết
-- [COMMAND_BUS.vi.md](COMMAND_BUS.vi.md) — command bus mà MCP tool gọi
-- [MODULE_MAP.vi.md](MODULE_MAP.vi.md) — `apps/mcp/src/tools/`
+- [PLAN.md](PLAN.md) mục 5 — AI/MCP và dữ liệu chung
+- [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) — luồng tạo ảnh chi tiết
+- [COMMAND_BUS.md](COMMAND_BUS.md) — command bus mà MCP tool gọi
+- [MODULE_MAP.md](MODULE_MAP.md) — `apps/mcp/src/tools/`

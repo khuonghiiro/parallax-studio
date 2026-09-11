@@ -26,7 +26,7 @@ bên ngoài nào.
 - Parallax và bóng đạt được qua depth layers + camera, không phải true 3D geometry.
 - Giới hạn ở góc nhìn mà asset 2D cung cấp; không có thể tích thực.
 
-**Tham chiếu:** [PLAN.vi.md](PLAN.vi.md) mục 1, 9.
+**Tham chiếu:** [PLAN.md](PLAN.md) mục 1, 9.
 
 ---
 
@@ -53,7 +53,7 @@ Không ghép PixiJS và Three.js trong bản đầu.
 - Preview và export dùng cùng Three.js scene graph.
 - Hiệu năng phụ thuộc WebGL2; nếu cần GPU compute thì cân nhắc WebGPU sau.
 
-**Tham chiếu:** [PLAN.vi.md](PLAN.vi.md) mục 3, 4.
+**Tham chiếu:** [PLAN.md](PLAN.md) mục 3, 4.
 
 ---
 
@@ -83,8 +83,8 @@ API key sinh ảnh riêng.
 - Cần protocol truyền file giữa client và app (local path hoặc upload).
 - Chất lượng và style ảnh phụ thuộc model của client.
 
-**Tham chiếu:** [IMAGE_WORKFLOW.vi.md](IMAGE_WORKFLOW.vi.md),
-[PLAN.vi.md](PLAN.vi.md) mục 5.
+**Tham chiếu:** [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md),
+[PLAN.md](PLAN.md) mục 5.
 
 ---
 
@@ -113,7 +113,7 @@ lợi ích rõ ràng.
 - Hot path (nếu cần) dùng WASM module có interface TypeScript.
 - Cần đo trước khi migrate; không migrate preventive.
 
-**Tham chiếu:** [PLAN.vi.md](PLAN.vi.md) mục 3.
+**Tham chiếu:** [PLAN.md](PLAN.md) mục 3.
 
 ---
 
@@ -138,8 +138,8 @@ cùng deformation pipeline, cùng material/shadow.
 - Preview có thể skip frame để giữ framerate tương tác.
 - Cần test contract: cùng time → cùng pose output.
 
-**Tham chiếu:** [PLAN.vi.md](PLAN.vi.md) mục 6,
-[DEFORMATION_PIPELINE.vi.md](DEFORMATION_PIPELINE.vi.md) mục 7.
+**Tham chiếu:** [PLAN.md](PLAN.md) mục 6,
+[DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) mục 7.
 
 ---
 
@@ -164,7 +164,7 @@ Chỉ dùng Three.js. Không thêm PixiJS vào dependency.
 - Không có sprite-specific optimization của PixiJS (batch rendering).
 - Nếu hiệu năng 2D sprite là bottleneck, tối ưu trong Three.js trước.
 
-**Tham chiếu:** [PLAN.vi.md](PLAN.vi.md) mục 3.
+**Tham chiếu:** [PLAN.md](PLAN.md) mục 3.
 
 ---
 
@@ -190,7 +190,7 @@ frame count và timestamp của video, không phụ thuộc tốc độ render t
 - Không nhân đôi frame 60 FPS để gọi là 120 FPS.
 - Preview giảm quality nhưng vẫn dùng cùng pose evaluator.
 
-**Tham chiếu:** [RENDER_PROFILES.vi.md](RENDER_PROFILES.vi.md) mục 2.
+**Tham chiếu:** [RENDER_PROFILES.md](RENDER_PROFILES.md) mục 2.
 
 ---
 
@@ -221,7 +221,7 @@ phải có topology chuẩn tương tự edge loops trong 3D.
 - Cần thư viện Rig-Ready Templates chuẩn hóa tỷ lệ và tư thế (T-pose, A-pose).
 - Ảnh nguồn từ AI cần tuân thủ bố cục để thuật toán landmark nhận diện chính xác nhất.
 
-**Tham chiếu:** [AUTO_RIG.vi.md](AUTO_RIG.vi.md), [IMAGE_WORKFLOW.vi.md](IMAGE_WORKFLOW.vi.md).
+**Tham chiếu:** [AUTO_RIG.md](AUTO_RIG.md), [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md).
 
 ---
 
@@ -256,7 +256,7 @@ gây phân mảnh giao diện và không đồng bộ cross-platform.
 - Mọi UI component phải map 1-1 với Application Command.
 - Bộ icon được quản lý tập trung trong `apps/editor/src/ui/icons/`.
 
-**Tham chiếu:** [UI_SPECIFICATION.vi.md](UI_SPECIFICATION.vi.md), [COMMAND_BUS.vi.md](COMMAND_BUS.vi.md), [MCP_TOOLS.vi.md](MCP_TOOLS.vi.md).
+**Tham chiếu:** [UI_SPECIFICATION.md](UI_SPECIFICATION.md), [COMMAND_BUS.md](COMMAND_BUS.md), [MCP_TOOLS.md](MCP_TOOLS.md).
 
 ---
 
