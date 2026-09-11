@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "paths": {
+      "@parallax/contracts": ["../contracts/src/index.ts"],
+      "@parallax/contracts/*": ["../contracts/src/*"],
+      "@parallax/core": ["../core/src/index.ts"],
+      "@parallax/core/*": ["../core/src/*"]
+    }
+  },
+  "include": ["src"]
+}
