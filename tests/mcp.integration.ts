@@ -113,7 +113,61 @@ async function runIntegrationTest(): Promise<void> {
     throw new Error('Asset list verification failed');
   }
 
-  console.log('--- MCP Integration Test Passed Successfully! ---');
+  // 2.6 AI Director: Parse screenplay
+  const parseRes = await callToolHandler({
+    method: 'tools/call',
+    params: {
+      name: 'director_parse_script',
+      arguments: {
+        scriptText: '# Cuộc Chiến Ánh Sáng\n1. Toàn cảnh lâu đài cổ kính [3s].\n2. Cận cảnh Hero mỉm cười [2s].',
+      },
+    },
+  });
+  const parseData = JSON.parse(parseRes.content[0].text);
+  console.log('6. director_parse_script result:', parseData.title, 'shots:', parseData.shots.length);
+  if (parseData.shots.length !== 2) {
+    throw new Error('director_parse_script failed to parse 2 shots');
+  }
+
+  // 2.7 AI Director: Stage scene
+  const stageRes = await callToolHandler({
+    method: 'tools/call',
+    params: {
+      name: 'director_stage_scene',
+      arguments: {
+        scriptText: '1. Toàn cảnh [3s].\n2. Cận cảnh [2s].',
+      },
+    },
+  });
+  const stageData = JSON.parse(stageRes.content[0].text);
+  console.log('7. director_stage_scene result:', stageData.status, 'shotsCount:', stageData.stagedShotsCount);
+  if (stageData.stagedShotsCount !== 2) {
+    throw new Error('director_stage_scene failed to stage shots');
+  }
+
+  // 2.8 AI Director: Render preview
+  const previewRes = await callToolHandler({
+    method: 'tools/call',
+    params: {
+      name: 'director_render_preview',
+      arguments: { frame: 10 },
+    },
+  });
+  const previewData = JSON.parse(previewRes.content[0].text);
+  console.log('8. director_render_preview result:', previewData.previewState);
+
+  // 2.9 AI Director: Export scene
+  const exportRes = await callToolHandler({
+    method: 'tools/call',
+    params: {
+      name: 'director_export_scene',
+      arguments: { profileName: '4k-uhd-60' },
+    },
+  });
+  const exportData = JSON.parse(exportRes.content[0].text);
+  console.log('9. director_export_scene result:', exportData.status, 'profile:', exportData.profile);
+
+  console.log('--- All 12 MCP Tools & AI Director Integration Tests Passed Successfully! ---');
 }
 
 runIntegrationTest().catch((err) => {

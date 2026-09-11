@@ -3,17 +3,26 @@ import {
   MousePointer2, Move, RotateCcw, Maximize2,
   Pentagon, Paintbrush, Bone,
   Grid3x3, Sparkles, Upload,
+  Camera, Sun,
 } from 'lucide-react';
 import { applyPoseToSkeleton } from '@parallax/runtime';
+import type { ViewAngle } from '@parallax/contracts';
 import { Button } from '../../ui/Button.js';
 import { useEditor } from '../../app/EditorContext.js';
 import { ViewportController, type OverlaySettings } from './viewport-controller.js';
 import { buildAssetMesh, type BuiltMeshResult } from './mesh-builder.js';
+import {
+  applyWeightBrush,
+  computeHeatmapColors,
+  type WeightBrushConfig,
+} from './weight-painter.js';
 import './ViewportPanel.css';
 
 export interface ViewportPanelProps {
   mode: 'setup' | 'animate';
 }
+
+export type ActiveTool = 'select' | 'move' | 'rotate' | 'scale' | 'weight-paint';
 
 /**
  * Central viewport — Three.js canvas + toolbar + overlay toggles.
@@ -29,6 +38,7 @@ export function ViewportPanel({
   const {
     snapshot,
     selectedAssetId,
+    selectedBoneId,
     projectState,
     setFps,
     currentFrame,
@@ -36,7 +46,17 @@ export function ViewportPanel({
     isPlaying,
     importImageFile,
     loadDemoCharacter,
+    dispatch,
   } = useEditor();
+
+  const [activeTool, setActiveTool] = useState<ActiveTool>('select');
+  const [brushConfig, setBrushConfig] = useState<WeightBrushConfig>({
+    radius: 45,
+    intensity: 0.35,
+    mode: 'add',
+  });
+  const [isPainting, setIsPainting] = useState<boolean>(false);
+  const tempWeightsRef = useRef<import('@parallax/contracts').VertexWeight[] | null>(null);
 
   const [overlays, setOverlaysState] = useState<OverlaySettings>({
     showGrid: true,
@@ -44,6 +64,12 @@ export function ViewportPanel({
     showSkeleton: true,
     showHeatmap: false,
   });
+
+  const [cameraMode, setCameraMode] = useState<'orthographic' | 'perspective'>('orthographic');
+  const [showShadows, setShowShadows] = useState<boolean>(true);
+
+  const asset = selectedAssetId ? projectState.getAssetData(selectedAssetId) : undefined;
+  const activeViewAngle = (asset?.viewSet?.activeView ?? 'front') as ViewAngle;
 
   // Initialize Three.js viewport controller
   useEffect(() => {
@@ -145,6 +171,93 @@ export function ViewportPanel({
     return () => clearInterval(interval);
   }, [isPlaying, setCurrentFrame]);
 
+  // Heatmap overlay & brush preview update
+  useEffect(() => {
+    if (!controllerRef.current || !asset?.mesh) return;
+
+    if (overlays.showHeatmap && selectedBoneId && asset.weights) {
+      const colors = computeHeatmapColors(
+        tempWeightsRef.current || asset.weights,
+        selectedBoneId,
+        asset.mesh.vertexCount,
+      );
+      controllerRef.current.updateMeshHeatmap(colors);
+    } else {
+      controllerRef.current.updateMeshHeatmap(null);
+    }
+  }, [overlays.showHeatmap, selectedBoneId, asset]);
+
+  const handleCanvasMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (activeTool === 'weight-paint' && e.button === 0 && selectedBoneId && asset?.mesh && asset?.weights) {
+        setIsPainting(true);
+        tempWeightsRef.current = [...asset.weights];
+        if (!controllerRef.current) return;
+        const worldPos = controllerRef.current.clientToWorld(e.clientX, e.clientY);
+        const curWeights = tempWeightsRef.current || asset.weights;
+        const newWeights = applyWeightBrush(
+          asset.mesh.vertices,
+          curWeights,
+          selectedBoneId,
+          { x: worldPos.x, y: worldPos.y },
+          brushConfig,
+        );
+        tempWeightsRef.current = newWeights;
+        const colors = computeHeatmapColors(newWeights, selectedBoneId, asset.mesh.vertexCount);
+        controllerRef.current.updateMeshHeatmap(colors);
+      }
+    },
+    [activeTool, selectedBoneId, asset, brushConfig],
+  );
+
+  const handleCanvasMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (isPainting && activeTool === 'weight-paint' && selectedBoneId && asset?.mesh && controllerRef.current) {
+        const worldPos = controllerRef.current.clientToWorld(e.clientX, e.clientY);
+        const curWeights = tempWeightsRef.current || asset.weights || [];
+        const newWeights = applyWeightBrush(
+          asset.mesh.vertices,
+          curWeights,
+          selectedBoneId,
+          { x: worldPos.x, y: worldPos.y },
+          brushConfig,
+        );
+        tempWeightsRef.current = newWeights;
+        const colors = computeHeatmapColors(newWeights, selectedBoneId, asset.mesh.vertexCount);
+        controllerRef.current.updateMeshHeatmap(colors);
+      }
+    },
+    [isPainting, activeTool, selectedBoneId, asset, brushConfig],
+  );
+
+  const handleCanvasMouseUp = useCallback(async () => {
+    if (isPainting) {
+      setIsPainting(false);
+      if (tempWeightsRef.current && selectedAssetId) {
+        await dispatch({
+          type: 'set_weights',
+          domain: 'rig',
+          targetId: selectedAssetId,
+          data: { assetId: selectedAssetId, weights: tempWeightsRef.current },
+        });
+        tempWeightsRef.current = null;
+      }
+    }
+  }, [isPainting, selectedAssetId, dispatch]);
+
+  const handleSwitchView = useCallback(
+    async (angle: ViewAngle) => {
+      if (!selectedAssetId) return;
+      await dispatch({
+        type: 'set_active_view',
+        domain: 'asset',
+        targetId: selectedAssetId,
+        data: { assetId: selectedAssetId, viewAngle: angle },
+      });
+    },
+    [selectedAssetId, dispatch],
+  );
+
   const handleToggleGrid = useCallback(() => {
     setOverlaysState((prev) => ({ ...prev, showGrid: !prev.showGrid }));
   }, []);
@@ -185,21 +298,90 @@ export function ViewportPanel({
         <ToolGroup label="Transform">
           <Button
             icon={MousePointer2} iconOnly size="sm" variant="ghost"
-            title="Select (V)" active
+            title="Select (V)" active={activeTool === 'select'}
+            onClick={() => setActiveTool('select')}
           />
           <Button
             icon={Move} iconOnly size="sm" variant="ghost"
-            title="Move (G)"
+            title="Move (G)" active={activeTool === 'move'}
+            onClick={() => setActiveTool('move')}
           />
           <Button
             icon={RotateCcw} iconOnly size="sm" variant="ghost"
-            title="Rotate (R)"
+            title="Rotate (R)" active={activeTool === 'rotate'}
+            onClick={() => setActiveTool('rotate')}
           />
           <Button
             icon={Maximize2} iconOnly size="sm" variant="ghost"
-            title="Scale (S)"
+            title="Scale (S)" active={activeTool === 'scale'}
+            onClick={() => setActiveTool('scale')}
           />
+          {mode === 'setup' && (
+            <Button
+              icon={Paintbrush} iconOnly size="sm" variant="ghost"
+              title="Weight Paint Brush"
+              active={activeTool === 'weight-paint'}
+              onClick={() => {
+                setActiveTool('weight-paint');
+                setOverlaysState((p) => ({ ...p, showHeatmap: true }));
+              }}
+            />
+          )}
+          {mode === 'setup' && activeTool === 'weight-paint' && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '0 4px',
+                fontSize: '11px',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <span>{brushConfig.radius}px</span>
+              <input
+                type="range"
+                min="15"
+                max="120"
+                value={brushConfig.radius}
+                onChange={(e) =>
+                  setBrushConfig((prev) => ({
+                    ...prev,
+                    radius: Number(e.target.value),
+                  }))
+                }
+                style={{ width: '50px', height: '14px' }}
+                title={`Brush Radius: ${brushConfig.radius}px`}
+              />
+            </div>
+          )}
         </ToolGroup>
+
+        {mode === 'setup' && (
+          <ToolGroup label="View Angles">
+            <div style={{ display: 'flex', gap: 2 }}>
+              {(['front', 'quarter-left', 'quarter-right', 'side-left', 'back'] as const).map((angle) => {
+                const labelMap: Record<string, string> = {
+                  'front': 'Front',
+                  'quarter-left': '3/4 L',
+                  'quarter-right': '3/4 R',
+                  'side-left': 'Side',
+                  'back': 'Back',
+                };
+                return (
+                  <button
+                    key={angle}
+                    className={`btn btn--sm ${activeViewAngle === angle ? 'btn--primary' : 'btn--ghost'}`}
+                    style={{ fontSize: '11px', padding: '2px 6px', height: '26px' }}
+                    onClick={() => handleSwitchView(angle)}
+                  >
+                    {labelMap[angle] ?? angle}
+                  </button>
+                );
+              })}
+            </div>
+          </ToolGroup>
+        )}
 
         {mode === 'setup' && (
           <ToolGroup label="Setup">
@@ -223,6 +405,30 @@ export function ViewportPanel({
             />
           </ToolGroup>
         )}
+
+        {/* Filmmaking & Camera Parallax */}
+        <ToolGroup label="Filmmaking">
+          <Button
+            icon={Camera}
+            iconOnly
+            size="sm"
+            variant="ghost"
+            title={cameraMode === 'perspective' ? 'Camera: 2.5D Parallax' : 'Camera: 2D Orthographic'}
+            active={cameraMode === 'perspective'}
+            onClick={() =>
+              setCameraMode((prev) => (prev === 'perspective' ? 'orthographic' : 'perspective'))
+            }
+          />
+          <Button
+            icon={Sun}
+            iconOnly
+            size="sm"
+            variant="ghost"
+            title={showShadows ? 'Realtime Shadows: Active' : 'Realtime Shadows: Off'}
+            active={showShadows}
+            onClick={() => setShowShadows((prev) => !prev)}
+          />
+        </ToolGroup>
 
         <div className="viewport__toolbar-spacer" />
 
@@ -250,7 +456,14 @@ export function ViewportPanel({
       </div>
 
       {/* Canvas Area */}
-      <div className="viewport__canvas" ref={canvasRef}>
+      <div
+        className="viewport__canvas"
+        ref={canvasRef}
+        onMouseDown={handleCanvasMouseDown}
+        onMouseMove={handleCanvasMouseMove}
+        onMouseUp={handleCanvasMouseUp}
+        style={{ cursor: activeTool === 'weight-paint' ? 'crosshair' : 'default' }}
+      >
         {!hasAssets && (
           <div className="viewport__empty">
             <span className="viewport__empty-icon">◈</span>

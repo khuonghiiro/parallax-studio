@@ -34,6 +34,11 @@ export type { AssetData, SceneData } from './projects/asset-data.js';
 // Jobs
 export { JobQueue } from './jobs/job-queue.js';
 export type { JobListener } from './jobs/job-queue.js';
+export { ExportJobQueue } from './jobs/export-job-queue.js';
+export type { ExportJob, ExportJobStatus } from './jobs/export-job-queue.js';
+
+// Adapters
+export { FfmpegEncoder } from './adapters/ffmpeg-encoder.js';
 
 // Ports (interfaces for dependency inversion)
 export type { StoragePort } from './ports/storage-port.js';
@@ -43,3 +48,4 @@ export type {
   EncoderSession,
   EncoderProgressCallback,
 } from './ports/encoder-port.js';
+

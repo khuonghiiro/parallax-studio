@@ -47,6 +47,20 @@ export {
   RigTemplateSchema,
 } from './rig/rig-template.js';
 export type { RigTemplateType, TemplateBone, RigTemplate } from './rig/rig-template.js';
+export {
+  WarpControlPointSchema,
+  BoundingBoxSchema,
+  WarpGridSchema,
+  MorphTargetSchema,
+  ExpressionPresetSchema,
+} from './rig/warp.js';
+export type {
+  WarpControlPoint,
+  BoundingBox,
+  WarpGrid,
+  MorphTarget,
+  ExpressionPreset,
+} from './rig/warp.js';
 
 // Animation domain
 export {
@@ -141,3 +155,18 @@ export type {
   ProjectDefaults,
   Manifest,
 } from './project/manifest.js';
+
+// Director domain
+export {
+  ShotCameraAngleSchema,
+  ParsedShotSchema,
+  ScriptParseResultSchema,
+  StagingRequestSchema,
+} from './director/director-schema.js';
+export type {
+  ShotCameraAngle,
+  ParsedShot,
+  ScriptParseResult,
+  StagingRequest,
+} from './director/director-schema.js';
+

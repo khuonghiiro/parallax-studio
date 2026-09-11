@@ -119,3 +119,229 @@ function createBoxMesh(width: number, height: number): TriangulationResult {
 
   return triangulateContour(outer);
 }
+
+/**
+ * Handle set_active_view command.
+ * Changes the active viewing angle of a multi-angle asset.
+ */
+export function handleSetActiveView(
+  state: ProjectState,
+  payload: CommandPayload,
+): CommandResult {
+  const assetId = (payload.targetId || payload.data.assetId) as string;
+  const viewAngle = payload.data.viewAngle as string;
+
+  if (!assetId || !viewAngle) {
+    return {
+      status: 'validation_error',
+      error: 'assetId and viewAngle are required for set_active_view',
+    };
+  }
+
+  const asset = state.getAssetData(assetId);
+  if (!asset) {
+    return { status: 'not_found', error: `Asset ${assetId} not found` };
+  }
+
+  const currentViewSet = asset.viewSet ?? {
+    activeView: 'front' as const,
+    views: [
+      {
+        id: `${assetId}-view-front`,
+        angle: 'front' as const,
+        populated: true,
+        directory: `assets/${assetId}/views/front`,
+        layerIds: [assetId],
+      },
+    ],
+  };
+
+  const updatedViewSet = {
+    ...currentViewSet,
+    activeView: viewAngle as typeof currentViewSet.activeView,
+  };
+
+  state.setAssetData(assetId, {
+    ...asset,
+    viewSet: updatedViewSet,
+  });
+
+  const revision = state.incrementRevision();
+  return {
+    status: 'success',
+    entityId: assetId,
+    revision,
+    data: { assetId, activeView: viewAngle },
+  };
+}
+
+/**
+ * Handle add_view_entry command.
+ * Adds or populates a viewing angle in the asset's ViewSet.
+ */
+export function handleAddViewEntry(
+  state: ProjectState,
+  payload: CommandPayload,
+): CommandResult {
+  const assetId = (payload.targetId || payload.data.assetId) as string;
+  const angle = payload.data.angle as string;
+
+  if (!assetId || !angle) {
+    return {
+      status: 'validation_error',
+      error: 'assetId and angle are required for add_view_entry',
+    };
+  }
+
+  const asset = state.getAssetData(assetId);
+  if (!asset) {
+    return { status: 'not_found', error: `Asset ${assetId} not found` };
+  }
+
+  const currentViewSet = asset.viewSet ?? {
+    activeView: 'front' as const,
+    views: [
+      {
+        id: `${assetId}-view-front`,
+        angle: 'front' as const,
+        populated: true,
+        directory: `assets/${assetId}/views/front`,
+        layerIds: [assetId],
+      },
+    ],
+  };
+
+  const existingIdx = currentViewSet.views.findIndex((v) => v.angle === angle);
+  let updatedViews = [...currentViewSet.views];
+
+  if (existingIdx >= 0) {
+    updatedViews[existingIdx] = {
+      ...updatedViews[existingIdx]!,
+      populated: true,
+    };
+  } else {
+    updatedViews.push({
+      id: `${assetId}-view-${angle}`,
+      angle: angle as typeof currentViewSet.activeView,
+      populated: true,
+      directory: `assets/${assetId}/views/${angle}`,
+      layerIds: [assetId],
+    });
+  }
+
+  const updatedViewSet = {
+    ...currentViewSet,
+    views: updatedViews,
+  };
+
+  state.setAssetData(assetId, {
+    ...asset,
+    viewSet: updatedViewSet,
+  });
+
+  const revision = state.incrementRevision();
+  return {
+    status: 'success',
+    entityId: assetId,
+    revision,
+    data: { assetId, angle, totalViews: updatedViews.length },
+  };
+}
+
+/**
+ * Handle set_warp_grid command.
+ * Updates the Free-Form Deformation grid for an asset.
+ */
+export function handleSetWarpGrid(
+  state: ProjectState,
+  payload: CommandPayload,
+): CommandResult {
+  const assetId = (payload.targetId || payload.data.assetId) as string;
+  const warpGrid = payload.data.warpGrid as import('@parallax/contracts').WarpGrid;
+
+  if (!assetId || !warpGrid) {
+    return {
+      status: 'validation_error',
+      error: 'assetId and warpGrid are required for set_warp_grid',
+    };
+  }
+
+  const asset = state.getAssetData(assetId);
+  if (!asset) {
+    return { status: 'not_found', error: `Asset ${assetId} not found` };
+  }
+
+  state.setAssetData(assetId, {
+    ...asset,
+    warpGrid,
+  });
+
+  const revision = state.incrementRevision();
+  return {
+    status: 'success',
+    entityId: assetId,
+    revision,
+    data: { assetId, cols: warpGrid.cols, rows: warpGrid.rows },
+  };
+}
+
+/**
+ * Handle set_morph_weight command.
+ * Sets the active blend weight for a facial expression morph target.
+ */
+export function handleSetMorphWeight(
+  state: ProjectState,
+  payload: CommandPayload,
+): CommandResult {
+  const assetId = (payload.targetId || payload.data.assetId) as string;
+  const morphName = payload.data.name as string;
+  const weight = Number(payload.data.weight);
+
+  if (!assetId || !morphName || Number.isNaN(weight)) {
+    return {
+      status: 'validation_error',
+      error: 'assetId, name, and numeric weight are required for set_morph_weight',
+    };
+  }
+
+  const asset = state.getAssetData(assetId);
+  if (!asset) {
+    return { status: 'not_found', error: `Asset ${assetId} not found` };
+  }
+
+  const currentTargets = asset.morphTargets ?? [];
+  const targetIdx = currentTargets.findIndex((m) => m.name === morphName);
+
+  let updatedTargets: import('@parallax/contracts').MorphTarget[];
+  if (targetIdx >= 0) {
+    updatedTargets = [...currentTargets];
+    updatedTargets[targetIdx] = {
+      ...updatedTargets[targetIdx]!,
+      weight: Math.max(0, Math.min(1, weight)),
+    };
+  } else {
+    // If not found, create an empty one or preserve
+    updatedTargets = [
+      ...currentTargets,
+      {
+        name: morphName,
+        deltas: [],
+        weight: Math.max(0, Math.min(1, weight)),
+      },
+    ];
+  }
+
+  state.setAssetData(assetId, {
+    ...asset,
+    morphTargets: updatedTargets,
+  });
+
+  const revision = state.incrementRevision();
+  return {
+    status: 'success',
+    entityId: assetId,
+    revision,
+    data: { assetId, morphName, weight },
+  };
+}
+

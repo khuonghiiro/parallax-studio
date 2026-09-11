@@ -27,5 +27,9 @@ export { TextureCache } from './resources/texture-cache.js';
 // Playback
 export { FrameLoop } from './playback/frame-loop.js';
 
+// Shadows
+export { ShadowMeshAdapter } from './shadows/shadow-mesh-adapter.js';
+
 // Export
 export { FrameRenderer } from './export/frame-renderer.js';
+

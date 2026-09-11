@@ -10,6 +10,12 @@ import {
   ProjectState,
   registerDefaultHandlers,
 } from '@parallax/application';
+import {
+  handleDirectorParseScript,
+  handleDirectorStageScene,
+  handleDirectorRenderPreview,
+  handleDirectorExportScene,
+} from './director-tools.js';
 
 /**
  * Parallax Studio MCP Server.
@@ -135,6 +141,51 @@ export function createMcpServer(): {
               sceneId: { type: 'string', description: 'Optional scene ID' },
             },
             required: ['property', 'frame', 'value'],
+          },
+        },
+        {
+          name: 'director_parse_script',
+          description: 'AI Director: Parse screenplay text into structured shots and character cues',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              scriptText: { type: 'string', description: 'Screenplay or prompt text' },
+              fps: { type: 'number', description: 'Frames per second (default 24)' },
+            },
+            required: ['scriptText'],
+          },
+        },
+        {
+          name: 'director_stage_scene',
+          description: 'AI Director: Automatically place shots, set camera framing, and stage animation',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              scriptText: { type: 'string', description: 'Screenplay text to stage' },
+              sceneId: { type: 'string', description: 'Target scene entity ID' },
+            },
+          },
+        },
+        {
+          name: 'director_render_preview',
+          description: 'AI Director: Inspect shot framing, camera depth, and visual composition metadata',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              sceneId: { type: 'string', description: 'Scene entity ID' },
+              frame: { type: 'number', description: 'Timeline frame number' },
+            },
+          },
+        },
+        {
+          name: 'director_export_scene',
+          description: 'AI Director: Queue scene film export for final video rendering',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              sceneId: { type: 'string', description: 'Scene entity ID' },
+              profileName: { type: 'string', description: 'Target export profile name' },
+            },
           },
         },
       ],
@@ -265,6 +316,18 @@ export function createMcpServer(): {
           content: [{ type: 'text', text: JSON.stringify(res, null, 2) }],
         };
       }
+
+      case 'director_parse_script':
+        return handleDirectorParseScript(args);
+
+      case 'director_stage_scene':
+        return await handleDirectorStageScene(bus, state, args);
+
+      case 'director_render_preview':
+        return handleDirectorRenderPreview(state, args);
+
+      case 'director_export_scene':
+        return handleDirectorExportScene(state, args);
 
       default:
         throw new Error(`Unknown tool: ${name}`);

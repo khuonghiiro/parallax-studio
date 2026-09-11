@@ -8,6 +8,11 @@ import type {
   Camera,
   Track,
   Clip,
+  ViewSet,
+  WarpGrid,
+  MorphTarget,
+  Light,
+  Shot,
 } from '@parallax/contracts';
 import type { TriangulationResult } from '@parallax/core';
 
@@ -24,6 +29,9 @@ export interface AssetData {
   readonly skeleton: BoneHierarchy | null;
   readonly weights: readonly VertexWeight[] | null;
   readonly landmarks: LandmarkSet | null;
+  readonly viewSet?: ViewSet;
+  readonly warpGrid?: WarpGrid;
+  readonly morphTargets?: readonly MorphTarget[];
 }
 
 /**
@@ -37,4 +45,6 @@ export interface SceneData {
   readonly camera: Camera;
   readonly tracks: readonly Track[];
   readonly clips: readonly Clip[];
+  readonly lights?: readonly Light[];
+  readonly shots?: readonly Shot[];
 }

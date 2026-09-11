@@ -1,4 +1,5 @@
-import type { Point2D } from '@parallax/contracts';
+import type { Point2D, WarpGrid } from '@parallax/contracts';
+import type { MorphBlendInput } from './morph-target.js';
 
 /**
  * Deformation order as specified in DEFORMATION_PIPELINE.md:
@@ -136,3 +137,66 @@ export const IDENTITY_TRANSFORM: InstanceTransform = {
   rotation: 0,
   scale: 1,
 };
+
+/**
+ * Creates a warp function combining WarpGrid FFD and additive Morph Targets
+ * in canonical rest space order (Warp -> Morph).
+ */
+export function createCombinedWarpFn(
+  grid?: WarpGrid,
+  morphTargets?: readonly MorphBlendInput[],
+): (vertex: Point2D, index: number) => WarpResult {
+  return (vertex: Point2D, index: number): WarpResult => {
+    let pos = vertex;
+
+    // Step A: Warp grid FFD
+    if (grid && grid.controlPoints.length > 0) {
+      const { minX, minY, maxX, maxY } = grid.bounds;
+      const w = Math.max(1e-5, maxX - minX);
+      const h = Math.max(1e-5, maxY - minY);
+      const u = Math.max(0, Math.min(1, (pos.x - minX) / w));
+      const v = Math.max(0, Math.min(1, (pos.y - minY) / h));
+
+      const maxCol = grid.cols - 1;
+      const maxRow = grid.rows - 1;
+      const c = Math.min(maxCol - 1, Math.max(0, Math.floor(u * maxCol)));
+      const r = Math.min(maxRow - 1, Math.max(0, Math.floor(v * maxRow)));
+      const s = u * maxCol - c;
+      const t = v * maxRow - r;
+
+      const p00 = grid.controlPoints[r * grid.cols + c];
+      const p10 = grid.controlPoints[r * grid.cols + (c + 1)];
+      const p01 = grid.controlPoints[(r + 1) * grid.cols + c];
+      const p11 = grid.controlPoints[(r + 1) * grid.cols + (c + 1)];
+
+      const dx =
+        (1 - s) * (1 - t) * (p00?.dx ?? 0) +
+        s * (1 - t) * (p10?.dx ?? 0) +
+        (1 - s) * t * (p01?.dx ?? 0) +
+        s * t * (p11?.dx ?? 0);
+      const dy =
+        (1 - s) * (1 - t) * (p00?.dy ?? 0) +
+        s * (1 - t) * (p10?.dy ?? 0) +
+        (1 - s) * t * (p01?.dy ?? 0) +
+        s * t * (p11?.dy ?? 0);
+
+      pos = { x: pos.x + dx, y: pos.y + dy };
+    }
+
+    // Step B: Morph targets (additive deltas)
+    if (morphTargets && morphTargets.length > 0) {
+      let mdx = 0;
+      let mdy = 0;
+      for (const mt of morphTargets) {
+        const weight = Math.max(0, Math.min(1, mt.weight ?? mt.target.weight));
+        if (weight > 0 && mt.target.deltas[index]) {
+          mdx += mt.target.deltas[index]!.x * weight;
+          mdy += mt.target.deltas[index]!.y * weight;
+        }
+      }
+      pos = { x: pos.x + mdx, y: pos.y + mdy };
+    }
+
+    return { position: pos };
+  };
+}

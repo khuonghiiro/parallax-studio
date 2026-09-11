@@ -25,6 +25,8 @@ export const CommandTypeSchema = z.enum([
   'set_pivot',
   'set_layer_visibility',
   'set_layer_opacity',
+  'set_active_view',
+  'add_view_entry',
 
   // Rig commands
   'set_landmarks',
@@ -33,6 +35,9 @@ export const CommandTypeSchema = z.enum([
   'remove_bone',
   'move_bone',
   'set_weights',
+  'set_warp_grid',
+  'set_morph_weight',
+  'solve_ik',
 
   // Mesh commands
   'generate_mesh',

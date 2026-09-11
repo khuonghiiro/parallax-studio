@@ -51,6 +51,17 @@ export function HierarchyPanel({
     });
   };
 
+  const activeViewAngle = currentAssetData?.viewSet?.activeView ?? 'front';
+  const handleSwitchView = async (angle: string) => {
+    if (!selectedAssetId) return;
+    await dispatch({
+      type: 'set_active_view',
+      domain: 'asset',
+      targetId: selectedAssetId,
+      data: { assetId: selectedAssetId, viewAngle: angle },
+    });
+  };
+
   return (
     <div className="hierarchy">
       {/* Search */}
@@ -141,12 +152,38 @@ export function HierarchyPanel({
 
       {/* Views Panel — Setup mode only */}
       {mode === 'setup' && (
-        <Panel title="Views" id="panel-views" defaultCollapsed>
+        <Panel title="Views" id="panel-views" defaultCollapsed={false}>
           <div className="hierarchy__list">
-            <div className="tree-item tree-item--selected">
-              <Icon icon={Image} size="sm" color="var(--text-secondary)" />
-              <span className="tree-item__label">Front View (Default)</span>
-            </div>
+            {[
+              { angle: 'front', label: 'Front View' },
+              { angle: 'quarter-left', label: 'Quarter-Left (3/4 L)' },
+              { angle: 'quarter-right', label: 'Quarter-Right (3/4 R)' },
+              { angle: 'side-left', label: 'Side-Left' },
+              { angle: 'side-right', label: 'Side-Right' },
+              { angle: 'back', label: 'Back View' },
+            ].map(({ angle, label }) => {
+              const isSelected = activeViewAngle === angle;
+              const isPopulated =
+                angle === 'front' ||
+                Boolean(currentAssetData?.viewSet?.views.some((v) => v.angle === angle));
+              return (
+                <div
+                  key={angle}
+                  className={`tree-item ${isSelected ? 'tree-item--selected' : ''}`}
+                  onClick={() => handleSwitchView(angle)}
+                  style={{ opacity: isPopulated ? 1 : 0.6 }}
+                >
+                  <Icon
+                    icon={Image}
+                    size="sm"
+                    color={isSelected ? 'var(--accent)' : 'var(--text-secondary)'}
+                  />
+                  <span className="tree-item__label">{label}</span>
+                  {isSelected && <span className="badge badge--success">Active</span>}
+                  {!isSelected && isPopulated && <span className="badge badge--info">Ready</span>}
+                </div>
+              );
+            })}
           </div>
         </Panel>
       )}

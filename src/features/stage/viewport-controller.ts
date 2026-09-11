@@ -265,6 +265,62 @@ export class ViewportController {
     return this.renderer;
   }
 
+  /**
+   * Update or remove heatmap vertex colors on the active mesh.
+   */
+  public updateMeshHeatmap(colors: Float32Array | null): void {
+    this.contentGroup.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.geometry) {
+        if (colors) {
+          child.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m) => {
+                m.vertexColors = true;
+                m.needsUpdate = true;
+              });
+            } else {
+              child.material.vertexColors = true;
+              child.material.needsUpdate = true;
+            }
+          }
+        } else {
+          child.geometry.deleteAttribute('color');
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m) => {
+                m.vertexColors = false;
+                m.needsUpdate = true;
+              });
+            } else {
+              child.material.vertexColors = false;
+              child.material.needsUpdate = true;
+            }
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Convert client window coordinates (e.g. from mouse event) to world 2D coordinates.
+   */
+  public clientToWorld(clientX: number, clientY: number): THREE.Vector2 {
+    const rect = this.container.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    const width = rect.width || 800;
+    const height = rect.height || 600;
+    const aspect = width / height;
+    const viewSize = 800 / this.zoom;
+
+    const worldX = (x / width - 0.5) * (viewSize * aspect) + this.panOffset.x;
+    const worldY = -(y / height - 0.5) * viewSize + this.panOffset.y;
+
+    return new THREE.Vector2(worldX, worldY);
+  }
+
   private startRenderLoop(): void {
     const loop = (timestamp: number): void => {
       if (this.isDisposed) return;

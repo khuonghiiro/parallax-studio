@@ -6,7 +6,12 @@ import type {
   LandmarkType,
   Point2D,
 } from '@parallax/contracts';
-import { generateAutoSkeleton, computeAutoWeights } from '@parallax/core';
+import {
+  generateAutoSkeleton,
+  computeAutoWeights,
+  normalizeWeights,
+  solveTwoBoneIK,
+} from '@parallax/core';
 import type { ProjectState } from '../../projects/project-state.js';
 
 /**
@@ -133,3 +138,95 @@ function generateHumanoidLandmarks(width: number, height: number): LandmarkSet {
     ],
   };
 }
+
+/**
+ * Handle set_weights command.
+ * Updates skinning weights for an asset's mesh (e.g. from the weight paint brush).
+ * Enforces weight normalization (sum = 1.0, max 4 influences).
+ */
+export function handleSetWeights(
+  state: ProjectState,
+  payload: CommandPayload,
+): CommandResult {
+  const assetId = (payload.targetId || payload.data.assetId) as string;
+  const rawWeights = payload.data.weights as import('@parallax/contracts').VertexWeight[];
+
+  if (!assetId || !Array.isArray(rawWeights)) {
+    return {
+      status: 'validation_error',
+      error: 'assetId and weights array are required for set_weights',
+    };
+  }
+
+  const asset = state.getAssetData(assetId);
+  if (!asset) {
+    return { status: 'not_found', error: `Asset ${assetId} not found` };
+  }
+
+  // Normalize weights
+  let normalizedWeights = rawWeights;
+  try {
+    const normResult = normalizeWeights(rawWeights);
+    normalizedWeights = normResult.weights as import('@parallax/contracts').VertexWeight[];
+  } catch (err: unknown) {
+    return {
+      status: 'validation_error',
+      error: `Failed to normalize weights: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  state.setAssetData(assetId, {
+    ...asset,
+    weights: normalizedWeights,
+  });
+
+  const revision = state.incrementRevision();
+  return {
+    status: 'success',
+    entityId: assetId,
+    revision,
+    data: { assetId, vertexCount: normalizedWeights.length },
+  };
+}
+
+/**
+ * Handle solve_ik command.
+ * Solves 2-bone IK analytically for limbs and returns joint rotation angles.
+ */
+export function handleSolveIK(
+  _state: ProjectState,
+  payload: CommandPayload,
+): CommandResult {
+  const root = payload.data.root as Point2D;
+  const length1 = Number(payload.data.length1);
+  const length2 = Number(payload.data.length2);
+  const target = payload.data.target as Point2D;
+  const poleDirection = (payload.data.poleDirection ?? 1) as 1 | -1;
+
+  if (!root || !target || Number.isNaN(length1) || Number.isNaN(length2)) {
+    return {
+      status: 'validation_error',
+      error: 'root, target, length1, and length2 are required for solve_ik',
+    };
+  }
+
+  const ikResult = solveTwoBoneIK({
+    root,
+    length1,
+    length2,
+    target,
+    poleDirection,
+  });
+
+  return {
+    status: 'success',
+    data: {
+      angle1: ikResult.angle1,
+      angle2: ikResult.angle2,
+      jointPos: ikResult.jointPos,
+      endPos: ikResult.endPos,
+      reached: ikResult.reached,
+    },
+  };
+}
+

@@ -30,8 +30,48 @@ export function PropertiesPanel({
   const [opacity, setOpacity] = useState<number>(100);
   const [easing, setEasing] = useState<string>('easeInOut');
 
+  // Expression and warp sliders
+  const [blinkWeight, setBlinkWeight] = useState<number>(0);
+  const [mouthWeight, setMouthWeight] = useState<number>(0);
+  const [smileWeight, setSmileWeight] = useState<number>(0);
+  const [squashValue, setSquashValue] = useState<number>(0);
+
   const asset = selectedAssetId ? projectState.getAssetData(selectedAssetId) : undefined;
   const bone = asset?.skeleton?.bones.find((b) => b.id === selectedBoneId);
+
+  const handleMorphChange = async (name: string, value: number) => {
+    if (!selectedAssetId) return;
+    const normVal = value / 100;
+    await dispatch({
+      type: 'set_morph_weight',
+      domain: 'rig',
+      targetId: selectedAssetId,
+      data: { assetId: selectedAssetId, name, weight: normVal },
+    });
+  };
+
+  const handleSquashStretchChange = async (val: number) => {
+    setSquashValue(val);
+    if (!selectedAssetId || !asset?.mesh) return;
+
+    const { createUniformWarpGrid, applySquashStretch } = await import('@parallax/core');
+    const width = asset.dimensions.width;
+    const height = asset.dimensions.height;
+    const baseGrid = asset.warpGrid ?? createUniformWarpGrid(4, 4, {
+      minX: -width / 2,
+      minY: -height / 2,
+      maxX: width / 2,
+      maxY: height / 2,
+    });
+    const updatedGrid = applySquashStretch(baseGrid, val / 100);
+
+    await dispatch({
+      type: 'set_warp_grid',
+      domain: 'rig',
+      targetId: selectedAssetId,
+      data: { assetId: selectedAssetId, warpGrid: updatedGrid },
+    });
+  };
 
   const handleAddKeyframe = async () => {
     if (!selectedBoneId) return;
@@ -115,10 +155,89 @@ export function PropertiesPanel({
         </Panel>
       )}
 
+      {/* Facial Expressions & Warp Deformer Section */}
+      {asset && (
+        <Panel title="Facial Expressions & Warp" id="panel-expressions">
+          <div className="props-grid">
+            {/* Quick Expression Presets */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+              {[
+                { name: 'Happy', smile: 100, mouth: 15, blink: 10 },
+                { name: 'Sad', smile: 0, mouth: 20, blink: 25 },
+                { name: 'Surprised', smile: 0, mouth: 95, blink: 0 },
+                { name: 'Angry', smile: 0, mouth: 35, blink: 15 },
+                { name: 'Wink', smile: 85, mouth: 10, blink: 100 },
+              ].map((p) => (
+                <button
+                  key={p.name}
+                  className="btn btn--sm btn--ghost"
+                  style={{ fontSize: '10px', padding: '2px 6px', height: '22px' }}
+                  onClick={() => {
+                    setSmileWeight(p.smile);
+                    setMouthWeight(p.mouth);
+                    setBlinkWeight(p.blink);
+                    handleMorphChange('smile', p.smile);
+                    handleMorphChange('mouth_open', p.mouth);
+                    handleMorphChange('blink', p.blink);
+                  }}
+                  title={`Apply ${p.name} preset`}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+
+            <Slider
+              label="Blink"
+              min={0}
+              max={100}
+              value={blinkWeight}
+              onChange={(val) => {
+                setBlinkWeight(val);
+                handleMorphChange('blink', val);
+              }}
+              unit="%"
+            />
+            <Slider
+              label="Mouth Open"
+              min={0}
+              max={100}
+              value={mouthWeight}
+              onChange={(val) => {
+                setMouthWeight(val);
+                handleMorphChange('mouth_open', val);
+              }}
+              unit="%"
+            />
+            <Slider
+              label="Smile"
+              min={0}
+              max={100}
+              value={smileWeight}
+              onChange={(val) => {
+                setSmileWeight(val);
+                handleMorphChange('smile', val);
+              }}
+              unit="%"
+            />
+            <Slider
+              label="Squash & Stretch"
+              min={-50}
+              max={50}
+              value={squashValue}
+              onChange={handleSquashStretchChange}
+              unit="%"
+            />
+          </div>
+        </Panel>
+      )}
+
       {/* Material Section */}
-      <Panel title="Material" id="panel-material" defaultCollapsed>
+      <Panel title="Material & Normal Map" id="panel-material" defaultCollapsed>
         <div className="props-grid">
           <Slider label="Opacity" min={0} max={100} value={opacity} onChange={setOpacity} unit="%" />
+          <Slider label="Normal Relief" min={0} max={100} value={75} onChange={() => {}} unit="%" />
+          <Input label="Lighting Shading" value="Blinn-Phong 2.5D" readOnly />
           <Input label="Tint" value="#ffffff" readOnly />
         </div>
       </Panel>

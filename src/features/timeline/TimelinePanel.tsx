@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   Play, Square, SkipBack, SkipForward,
-  Diamond, KeyRound,
+  Diamond, KeyRound, Clapperboard, Plus,
 } from 'lucide-react';
+import type { Shot } from '@parallax/contracts';
 import { Button } from '../../ui/Button.js';
 import { useEditor } from '../../app/EditorContext.js';
 import './TimelinePanel.css';
@@ -14,6 +15,7 @@ const TOTAL_FRAMES = 120; // 5.0 seconds at 24fps
  */
 export function TimelinePanel(): React.JSX.Element {
   const [autoKey, setAutoKey] = useState(false);
+  const [activeShotId, setActiveShotId] = useState<string>('shot-1');
   const gridRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -25,6 +27,52 @@ export function TimelinePanel(): React.JSX.Element {
     projectState,
     dispatch,
   } = useEditor();
+
+  const scenes = projectState.getAllSceneData();
+  const scene = scenes[0];
+
+  const defaultShots: Shot[] = [
+    {
+      id: 'shot-1',
+      name: 'Shot 1: Wide',
+      cameraId: 'camera-main',
+      startFrame: 0,
+      endFrame: 60,
+      clipAssignments: {},
+      transitionIn: 'cut',
+      transitionDuration: 0,
+    },
+    {
+      id: 'shot-2',
+      name: 'Shot 2: Close-up',
+      cameraId: 'camera-main',
+      startFrame: 60,
+      endFrame: 120,
+      clipAssignments: {},
+      transitionIn: 'fade',
+      transitionDuration: 15,
+    },
+  ];
+
+  const shots = (scene?.shots && scene.shots.length > 0) ? scene.shots : defaultShots;
+
+  const handleAddShot = async () => {
+    const lastShot = shots[shots.length - 1];
+    const newStart = lastShot ? lastShot.endFrame : 0;
+    const newEnd = Math.min(TOTAL_FRAMES, newStart + 40);
+
+    await dispatch({
+      type: 'add_shot',
+      domain: 'scene',
+      data: {
+        name: `Shot ${shots.length + 1}`,
+        startFrame: newStart,
+        endFrame: newEnd,
+        transitionIn: 'fade',
+        transitionDuration: 12,
+      },
+    });
+  };
 
   const asset = selectedAssetId ? projectState.getAssetData(selectedAssetId) : undefined;
   const hasRig = Boolean(asset?.skeleton);
@@ -133,6 +181,83 @@ export function TimelinePanel(): React.JSX.Element {
         <span className="timeline__time">
           Frame {currentFrame} ({currentTimeSec}s / {totalTimeSec}s)
         </span>
+      </div>
+
+      {/* Shots Strip for Filmmaking */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 12px',
+          background: 'var(--bg-panel)',
+          borderBottom: '1px solid var(--border-subtle)',
+          fontSize: '11px',
+          overflowX: 'auto',
+        }}
+      >
+        <span
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            fontWeight: 600,
+            color: 'var(--text-secondary)',
+            marginRight: 4,
+          }}
+        >
+          <Clapperboard size={13} />
+          Shots:
+        </span>
+
+        {shots.map((shot) => {
+          const isActive = shot.id === activeShotId;
+          return (
+            <button
+              key={shot.id}
+              className={`btn btn--sm ${isActive ? 'btn--primary' : 'btn--ghost'}`}
+              style={{
+                fontSize: '11px',
+                padding: '2px 8px',
+                height: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+              onClick={() => {
+                setActiveShotId(shot.id);
+                setCurrentFrame(shot.startFrame);
+              }}
+            >
+              <span>{shot.name}</span>
+              <span style={{ opacity: 0.7, fontSize: '10px' }}>
+                ({shot.startFrame}-{shot.endFrame}f)
+              </span>
+              {shot.transitionIn && shot.transitionIn !== 'cut' && (
+                <span
+                  style={{
+                    background: 'rgba(255,255,255,0.15)',
+                    padding: '0 3px',
+                    borderRadius: '2px',
+                    fontSize: '9px',
+                  }}
+                >
+                  {shot.transitionIn}
+                </span>
+              )}
+            </button>
+          );
+        })}
+
+        <Button
+          icon={Plus}
+          size="sm"
+          variant="ghost"
+          onClick={handleAddShot}
+          title="Add New Shot"
+        >
+          Shot
+        </Button>
       </div>
 
       {/* Track Area */}
