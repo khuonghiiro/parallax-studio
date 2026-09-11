@@ -1,0 +1,40 @@
+/* ── StatusBar Styles ── */
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  height: var(--statusbar-h);
+  padding: 0 var(--sp-6);
+  background: var(--bg-panel-alt);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  gap: var(--sp-4);
+}
+
+.statusbar__message {
+  color: var(--text-secondary);
+}
+
+.statusbar__spacer {
+  flex: 1;
+}
+
+.statusbar__stat strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.statusbar__divider {
+  width: 1px;
+  height: 12px;
+  background: var(--border-default);
+}
+
+.statusbar__gpu {
+  color: var(--success);
+}
+
+.statusbar__gpu--error {
+  color: var(--destructive);
+}

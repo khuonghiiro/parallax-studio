@@ -1,0 +1,63 @@
+/* ── Root Editor Layout ── */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--bg-app);
+}
+
+/* ── Main Body: 3-column layout ── */
+
+.editor__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Left Panel */
+.editor__left {
+  width: var(--panel-left-w);
+  min-width: 180px;
+  max-width: 380px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* Center Viewport */
+.editor__center {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app);
+  position: relative;
+}
+
+/* Right Panel */
+.editor__right {
+  width: var(--panel-right-w);
+  min-width: 200px;
+  max-width: 400px;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* Bottom — Timeline */
+.editor__bottom {
+  height: var(--timeline-h);
+  min-height: 120px;
+  max-height: 400px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-subtle);
+  overflow: hidden;
+}

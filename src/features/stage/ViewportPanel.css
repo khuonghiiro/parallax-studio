@@ -1,0 +1,86 @@
+/* ── Viewport Panel Styles ── */
+
+.viewport {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Toolbar ── */
+
+.viewport__toolbar {
+  display: flex;
+  align-items: center;
+  height: var(--toolbar-h);
+  padding: 0 var(--sp-4);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--sp-2);
+}
+
+.viewport__toolbar-spacer {
+  flex: 1;
+}
+
+.tool-group {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-2);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.tool-group:last-child {
+  border-right: none;
+}
+
+/* ── Canvas ── */
+
+.viewport__canvas {
+  flex: 1;
+  position: relative;
+  background: #141420;
+  overflow: hidden;
+
+  /* Subtle grid pattern */
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* ── Empty State ── */
+
+.viewport__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  gap: var(--sp-4);
+}
+
+.viewport__empty-icon {
+  font-size: 48px;
+  color: var(--accent);
+  opacity: 0.3;
+  animation: viewport-pulse 3s ease-in-out infinite;
+}
+
+.viewport__empty h3 {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.viewport__empty p {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+@keyframes viewport-pulse {
+  0%, 100% { opacity: 0.2; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.05); }
+}

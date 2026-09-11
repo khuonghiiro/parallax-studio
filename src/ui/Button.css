@@ -1,0 +1,138 @@
+/* ── Button Component Styles ── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── Sizes ── */
+
+.btn--sm {
+  height: 24px;
+  padding: 0 var(--sp-4);
+  font-size: var(--text-xs);
+}
+
+.btn--md {
+  height: 28px;
+  padding: 0 var(--sp-6);
+  font-size: var(--text-sm);
+}
+
+.btn--lg {
+  height: 32px;
+  padding: 0 var(--sp-8);
+  font-size: var(--text-base);
+}
+
+/* ── Icon-only ── */
+
+.btn--icon-only.btn--sm {
+  width: 24px;
+  padding: 0;
+}
+
+.btn--icon-only.btn--md {
+  width: 28px;
+  padding: 0;
+}
+
+.btn--icon-only.btn--lg {
+  width: 32px;
+  padding: 0;
+}
+
+/* ── Primary ── */
+
+.btn--primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn--primary:hover {
+  background: var(--accent-hover);
+}
+
+.btn--primary:active {
+  background: var(--accent-active);
+}
+
+/* ── Secondary ── */
+
+.btn--secondary {
+  background: var(--bg-surface);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.btn--secondary:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.btn--secondary:active {
+  background: var(--bg-active);
+}
+
+/* ── Ghost ── */
+
+.btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.btn--ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn--ghost:active {
+  background: var(--bg-active);
+}
+
+/* ── Danger ── */
+
+.btn--danger {
+  background: transparent;
+  color: var(--destructive);
+}
+
+.btn--danger:hover {
+  background: var(--destructive-muted);
+}
+
+/* ── Active / Toggled State ── */
+
+.btn--active {
+  background: var(--accent-muted);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn--active:hover {
+  background: rgba(99, 128, 255, 0.25);
+}
+
+/* ── Label ── */
+
+.btn__label {
+  line-height: 1;
+}

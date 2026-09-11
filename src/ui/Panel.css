@@ -1,0 +1,57 @@
+/* ── Panel Component Styles ── */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.panel__header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: var(--panel-header-h);
+  padding: 0 var(--sp-4);
+  background: var(--bg-panel-alt);
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.panel__header:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.panel__chevron {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  width: 10px;
+  text-align: center;
+}
+
+.panel__title {
+  flex: 1;
+}
+
+.panel__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.panel__body {
+  padding: var(--sp-4);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.panel--collapsed .panel__body {
+  display: none;
+}

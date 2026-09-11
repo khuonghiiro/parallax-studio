@@ -1,0 +1,84 @@
+/* ── MenuBar Styles ── */
+
+.menubar {
+  display: flex;
+  align-items: center;
+  height: var(--menubar-h);
+  padding: 0 var(--sp-4);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--sp-4);
+  z-index: 100;
+}
+
+/* Brand */
+.menubar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.menubar__logo {
+  font-size: var(--text-xl);
+  color: var(--accent);
+  line-height: 1;
+}
+
+.menubar__name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+/* Mode Toggle */
+.menubar__modes {
+  display: flex;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
+.menubar__mode {
+  padding: var(--sp-1) var(--sp-6);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.menubar__mode:hover {
+  color: var(--text-primary);
+}
+
+.menubar__mode--active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Spacer */
+.menubar__spacer {
+  flex: 1;
+}
+
+/* Actions */
+.menubar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.menubar__divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border-default);
+  margin: 0 var(--sp-2);
+}

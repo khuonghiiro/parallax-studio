@@ -1,0 +1,144 @@
+/* ── Timeline Panel Styles ── */
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ── Header ── */
+
+.timeline__header {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 var(--sp-4);
+  background: var(--bg-panel-alt);
+  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--sp-3);
+}
+
+.timeline__clip-name {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.timeline__spacer {
+  flex: 1;
+}
+
+.timeline__controls {
+  display: flex;
+  gap: var(--sp-1);
+}
+
+.timeline__divider {
+  width: 1px;
+  height: 14px;
+  background: var(--border-default);
+}
+
+.timeline__time {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  min-width: 80px;
+  text-align: right;
+}
+
+/* ── Body ── */
+
+.timeline__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Track Labels */
+.timeline__labels {
+  width: 140px;
+  min-width: 100px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border-subtle);
+  overflow-y: auto;
+}
+
+.timeline__empty-label {
+  padding: var(--sp-8) var(--sp-4);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Track Grid */
+.timeline__grid {
+  flex: 1;
+  position: relative;
+  background: var(--bg-app);
+  overflow-x: auto;
+  overflow-y: auto;
+
+  /* Grid lines */
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      var(--border-subtle) 0,
+      var(--border-subtle) 1px,
+      transparent 1px,
+      transparent
+    );
+  background-size: 80px 100%;
+}
+
+/* Ruler */
+.timeline__ruler {
+  display: flex;
+  height: 20px;
+  background: var(--bg-panel-alt);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.timeline__ruler-mark {
+  width: 80px;
+  flex-shrink: 0;
+  padding-left: var(--sp-2);
+  line-height: 20px;
+  border-left: 1px solid var(--border-subtle);
+}
+
+/* Playhead */
+.timeline__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.timeline__playhead::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -4px;
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+}
+
+/* Empty state */
+.timeline__tracks-empty {
+  position: absolute;
+  inset: 20px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
