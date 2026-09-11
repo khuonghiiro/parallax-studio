@@ -49,7 +49,30 @@ Domain tương ứng với thư mục trong `apps/mcp/src/tools/`.
 | `asset.get_preview` | read | Preview thumbnail hoặc render nhỏ |
 | `asset.delete` | write | Xóa asset và dữ liệu liên quan |
 
-### 3.3 Rig
+### 3.3 Mesh
+
+| Tool | Loại | Mô tả |
+| --- | --- | --- |
+| `mesh.detect_contour` | read | Tự động phát hiện contour từ alpha channel của layer |
+| `mesh.generate` | write | Tạo mesh từ contour: triangulation, UV, vertex placement |
+| `mesh.add_edge_loops` | write | Thêm vertex vòng quanh khớp để deform mượt hơn |
+| `mesh.set_density` | write | Điều chỉnh mật độ vertex cho vùng cần chuyển động nhiều |
+| `mesh.preview` | read | Trả ảnh wireframe mesh phủ lên texture để agent kiểm tra |
+| `mesh.get_info` | read | Vertex count, triangle count, topology, edge loops |
+| `mesh.refine` | write | Sửa mesh: thêm/xóa vertex, điều chỉnh vùng cục bộ |
+| `mesh.validate` | read | Kiểm tra mesh: degenerate triangles, UV overlap, density |
+
+Khi AI agent gọi `mesh.generate`, app thực hiện:
+1. Đọc alpha channel → trích xuất contour (silhouette).
+2. Đặt vertex dọc contour và thêm vertex nội bộ (Earcut + vertex scatter).
+3. Thêm edge loops quanh vùng khớp (vai, khuỷu, hông, đầu gối, cổ).
+4. Tam giác hóa và tạo UV mapping từ texture coords.
+5. Trả mesh preview cho agent kiểm tra trước khi tiếp tục rig.
+
+Agent dùng vision để xem mesh preview, quyết định cần refine ở đâu (thêm vertex
+quanh mắt cho biểu cảm, giảm density ở vùng ít chuyển động), rồi gọi `mesh.refine`.
+
+### 3.4 Rig
 
 | Tool | Loại | Mô tả |
 | --- | --- | --- |
@@ -60,8 +83,20 @@ Domain tương ứng với thư mục trong `apps/mcp/src/tools/`.
 | `rig.get_hierarchy` | read | Bone tree, pivots, weights hiện tại |
 | `rig.test_pose` | write | Áp pose tạm và trả preview (không lưu) |
 | `rig.set_rest_pose` | write | Đặt rest pose cho view hiện tại |
+| `rig.detect_landmarks` | read | Phân tích ảnh, đề xuất vị trí landmarks |
+| `rig.set_landmarks` | write | Đặt landmarks theo tọa độ agent/user chỉ định |
+| `rig.get_landmarks` | read | Đọc landmarks hiện tại |
+| `rig.adjust_landmark` | write | Kéo/sửa một landmark, cập nhật skeleton real-time |
+| `rig.auto_skeleton` | write | Sinh skeleton từ landmarks + template type |
+| `rig.auto_weights` | write | Tự động weights theo bone proximity + layer mask |
+| `rig.preview_skeleton` | read | Trả ảnh skeleton overlay lên nhân vật |
+| `rig.list_rig_templates` | read | Danh sách Rig-Ready Image Templates có sẵn |
+| `rig.get_rig_template` | read | Chi tiết template: proportions, landmarks, prompt |
+| `rig.apply_rig_template` | write | Áp template lên ảnh: tính landmarks + skeleton + weights |
 
-### 3.4 Animation
+Chi tiết cơ chế auto-rig và Rig-Ready Template: [AUTO_RIG.vi.md](AUTO_RIG.vi.md).
+
+### 3.5 Animation
 
 | Tool | Loại | Mô tả |
 | --- | --- | --- |
@@ -71,8 +106,14 @@ Domain tương ứng với thư mục trong `apps/mcp/src/tools/`.
 | `animation.list_clips` | read | Danh sách clip trên timeline |
 | `animation.get_clip_info` | read | Keyframes, duration, easing của clip |
 | `animation.preview_frame` | read | Render một frame tại thời điểm chỉ định |
+| `animation.list_templates` | read | Danh sách animation templates khả dụng |
+| `animation.apply_template` | write | Áp template lên skeleton hiện tại |
+| `animation.adjust_template` | write | Sửa keyframes của template đã áp |
 
-### 3.5 Scene
+Animation templates và retarget: [AUTO_RIG.vi.md](AUTO_RIG.vi.md) mục 5.
+
+
+### 3.6 Scene
 
 | Tool | Loại | Mô tả |
 | --- | --- | --- |
@@ -87,7 +128,7 @@ Domain tương ứng với thư mục trong `apps/mcp/src/tools/`.
 | `scene.create_shot` | write | Tạo shot trong timeline |
 | `scene.list_shots` | read | Danh sách shot |
 
-### 3.6 Export
+### 3.7 Export
 
 | Tool | Loại | Mô tả |
 | --- | --- | --- |
@@ -236,20 +277,27 @@ Batch thực hiện nguyên tử qua command bus (xem [COMMAND_BUS.vi.md](COMMAN
 3. [Agent gọi tool sinh ảnh của client]
 4. asset.import_image             → nhập ảnh thật
 5. asset.attach_view              → gắn góc nhìn
-6. asset.validate_artwork         → kiểm tra
-7. rig.create_skeleton            → tạo xương
-8. rig.set_weights                → đặt weights
-9. rig.test_pose                  → test pose, xem preview
-10. scene.create                  → tạo scene
-11. scene.add_instance            → đặt nhân vật
-12. scene.set_camera              → camera
-13. scene.add_light               → đèn
-14. animation.create_clip         → clip
-15. animation.set_keyframe        → keyframes
-16. animation.preview_frame       → xem trước
-17. export.start_job              → xuất phim
-18. export.get_job_status         → theo dõi tiến độ
-19. export.get_result             → lấy file kết quả
+6. asset.attach_layer             → gắn từng layer bộ phận
+7. asset.validate_artwork         → kiểm tra layers, alpha, overlap
+8. mesh.detect_contour            → phát hiện contour từ alpha
+9. mesh.generate                  → tạo mesh tự động
+10. mesh.add_edge_loops           → thêm edge loops quanh khớp
+11. mesh.preview                  → agent xem wireframe, quyết định refine
+12. mesh.refine                   → sửa mesh nếu cần (lặp 11–12)
+13. mesh.validate                 → kiểm tra mesh quality
+14. rig.create_skeleton           → tạo xương
+15. rig.set_weights               → đặt weights
+16. rig.test_pose                 → test pose, xem preview
+17. scene.create                  → tạo scene
+18. scene.add_instance            → đặt nhân vật
+19. scene.set_camera              → camera
+20. scene.add_light               → đèn
+21. animation.create_clip         → clip
+22. animation.set_keyframe        → keyframes
+23. animation.preview_frame       → xem trước
+24. export.start_job              → xuất phim
+25. export.get_job_status         → theo dõi tiến độ
+26. export.get_result             → lấy file kết quả
 ```
 
 ## 10. Liên kết

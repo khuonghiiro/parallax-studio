@@ -46,7 +46,8 @@ packages/
     export/                 ExportProfile: resolution, FPS, codec, quality
     session/                SessionInfo và transport DTO
   core/src/
-    geometry/               Contour, triangulation adapter, UV, topology
+    geometry/               Contour extraction, triangulation (Earcut), UV,
+                            vertex density, edge loops, mesh preview, topology
     rig/                    Hierarchy, bind pose, weights, IK
     deformation/            Warp grid, morph, pose composition
     views/                  View selection và chuyển góc

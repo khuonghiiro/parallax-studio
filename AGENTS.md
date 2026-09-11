@@ -15,7 +15,14 @@ and other coding agents working in this workspace.
 8. `docs/TESTING_STRATEGY.vi.md` — test categories, CI gates and benchmark protocol.
 9. `docs/ARCHITECTURE_DECISIONS.vi.md` — architecture decision records.
 10. `docs/GLOSSARY.vi.md` — project terminology reference.
-11. `.agents/skills/parallax-development/SKILL.md` — workflow for implementing,
+11. `docs/AUTO_RIG.vi.md` — Mixamo-style auto-rig: landmarks, auto-skeleton,
+    auto-weights and animation templates.
+12. `docs/IMAGE_WORKFLOW.vi.md` — AI image creation, part decomposition,
+    multi-view, auto-mesh generation pipeline.
+13. `docs/RENDER_PROFILES.vi.md` — output resolution/FPS presets and GPU targets.
+14. `docs/UI_SPECIFICATION.vi.md` — UI layout, panels, overlays, command mapping
+    and MCP integration for the editor.
+15. `.agents/skills/parallax-development/SKILL.md` — workflow for implementing,
     refactoring or reviewing code. Read directly if skill discovery is unavailable.
 
 The current user request is planning and project guidance. A plan is not permission

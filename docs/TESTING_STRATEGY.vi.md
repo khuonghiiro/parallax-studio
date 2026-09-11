@@ -103,6 +103,96 @@ flowchart LR
 | Batch execute | Integration | Nhiều tool trong batch → atomic |
 | UI/MCP consistency | Integration | Cùng command từ UI và MCP → cùng state |
 
+### 2.9 Asset Creation / Decomposition
+
+| Test | Loại | Kiểm tra |
+| --- | --- | --- |
+| Layer alpha validity | Unit | Alpha thật (RGBA), không phải nền caro vẽ sẵn |
+| Halo/fringe detection | Unit | Mép layer không có fringe từ nền cũ |
+| Canvas alignment | Unit | Mọi layer cùng canvas size với ảnh gốc |
+| Layer composite | Integration | Tất cả layer ghép lại khớp ảnh gốc (PSNR/SSIM) |
+| Overlap coverage | Integration | Vùng nối (vai-thân, đùi-hông) có đủ pixel phủ |
+| Occluded fill | Integration | Phần bị che đã vẽ bù, không lộ khoảng trống khi xoay bone |
+| Part naming | Unit | Tên layer đúng quy ước (head, torso, left-arm...) |
+| Pivot at joint | Unit | Pivot đặt tại khớp tự nhiên, không ở tâm bounding box |
+| Draw order valid | Unit | Draw order hợp lệ, không trùng index |
+| Import idempotent | Integration | Cùng source hash → không nhân đôi layer |
+| Flatten rejection | Unit | Ảnh flatten (1 layer) → cảnh báo chưa tách |
+
+### 2.10 Multi-View Consistency
+
+| Test | Loại | Kiểm tra |
+| --- | --- | --- |
+| Height consistency | Unit | Chiều cao nhân vật giữa views sai khác ≤ 5% |
+| Color palette match | Visual | Tông da, tóc, quần áo nhất quán (ΔE ≤ threshold) |
+| Part name matching | Unit | Cùng tên bộ phận giữa mọi view của asset |
+| Pivot alignment | Unit | Pivot cùng ý nghĩa (cổ, vai, hông) khớp vị trí tương đối |
+| Draw order per view | Unit | Mỗi view có draw order riêng, hợp lệ |
+| View angle label | Unit | Góc nhìn ghi đúng (front, quarter-left, side...) |
+| Missing view warning | Unit | Thiếu góc bắt buộc → cảnh báo, không block |
+| View switch pivot stable | Integration | Chuyển view không nhảy pivot hoặc lệch vị trí nhân vật |
+| Costume consistency | Visual | Trang phục, phụ kiện, hoa văn nhất quán giữa views |
+| Topology compatibility | Unit | Views dùng morph phải có cùng vertex count + indices |
+
+### 2.11 Mesh Generation
+
+| Test | Loại | Kiểm tra |
+| --- | --- | --- |
+| Contour from alpha | Unit | Alpha sạch → contour khớp silhouette, không lệch |
+| Contour simplification | Unit | Douglas-Peucker giảm vertex nhưng PSNR contour ≥ threshold |
+| Triangulation valid | Unit | Không degenerate triangles (area > 0), không overlap |
+| UV mapping accuracy | Unit | UV coords khớp texture, không lệch pixel |
+| Vertex density zones | Unit | Vùng khớp có nhiều vertex hơn vùng tĩnh |
+| Edge loop placement | Integration | Edge loop tại vị trí khớp → deform mượt hơn khi test pose |
+| Mesh density modes | Unit | low/medium/high cho vertex count trong khoảng dự kiến |
+| Mesh preview render | Integration | Wireframe overlay đúng vị trí trên texture |
+| Mesh refine additive | Integration | Thêm vertex ở vùng chỉ định không phá mesh hiện tại |
+| Mesh validate pass | Unit | Mesh hợp lệ không có degenerate/overlap/UV lỗi |
+| Contour fail on noise | Unit | Alpha bẩn (caro, fringe) → cảnh báo, không tạo mesh rác |
+
+### 2.12 Auto-Rig
+
+| Test | Loại | Kiểm tra |
+| --- | --- | --- |
+| Landmark minimum count | Unit | Thiếu landmarks bắt buộc → lỗi rõ ràng |
+| Landmark duplicate | Unit | Hai landmarks cùng vị trí → cảnh báo |
+| Auto-skeleton hierarchy | Unit | Skeleton sinh ra acyclic, bones có length > 0 |
+| Bone symmetry | Unit | Left/right bones length sai khác ≤ 10% → OK, > 10% → cảnh báo |
+| Auto-weights normalized | Unit | Tổng weight per vertex = 1.0 ± 0.001 |
+| Auto-weights max influences | Unit | ≤ 4 bone per vertex |
+| Layer-aware weights | Integration | Vertex thuộc layer arm bind vào arm bone, không spine |
+| Auto-weights no orphan | Unit | Không có vertex với tất cả weights = 0 |
+| Skeleton preview render | Integration | Skeleton overlay đúng vị trí trên nhân vật |
+| Test pose after auto-rig | Integration | Xoay bone ±45° → deformation hợp lý, không rách |
+| Landmark adjust → reskeleton | Integration | Sửa landmark → skeleton cập nhật đúng |
+
+### 2.13 Rig-Ready Image Templates
+
+| Test | Loại | Kiểm tra |
+| --- | --- | --- |
+| Template schema valid | Unit | Rig-Ready Template JSON hợp lệ, proportions đầy đủ |
+| Proportions → landmarks | Unit | Proportions × image size → tọa độ pixel chính xác |
+| Apply template one-step | Integration | `apply_rig_template` → landmarks + skeleton + weights |
+| Template prompt includes hint | Unit | basePrompt + promptHint có trong brief sinh ảnh |
+| Drag-adjust real-time | Integration | Kéo landmark → skeleton + weights cập nhật ngay |
+| Drag does not reset others | Unit | Kéo 1 landmark không đổi vị trí landmarks khác |
+| Chibi proportions different | Unit | Template chibi head ≈ 35% height, khác humanoid |
+| Template mismatch warning | Unit | Ảnh không khớp tỷ lệ template → cảnh báo |
+| Template list includes defaults | Unit | list_rig_templates trả ≥ 6 templates mặc định |
+
+### 2.14 Animation Templates
+
+| Test | Loại | Kiểm tra |
+| --- | --- | --- |
+| Template schema valid | Unit | Template JSON hợp lệ, có đủ required fields |
+| Template skeleton match | Unit | Template humanoid chỉ áp lên skeleton humanoid |
+| Retarget scale | Unit | Nhân vật to hơn → translation scale tỷ lệ |
+| Missing bone fallback | Unit | Bone trong template không có → giữ rest pose |
+| Extra bone untouched | Unit | Bone trong nhân vật không trong template → rest pose |
+| Loop animation | Integration | Loopable template: frame cuối = frame đầu (smooth) |
+| Template preview | Integration | Áp template → preview animation đúng |
+| Template adjust | Integration | Sửa keyframe sau áp → lưu đúng, undo hoạt động |
+
 ## 3. Test contract: Preview = Export
 
 Đây là test quan trọng nhất cho tính nhất quán. Phương pháp:
@@ -205,14 +295,30 @@ tests/
       warp.test.ts
       morph.test.ts
       pipeline-order.test.ts
+    asset/
+      layer-alpha.test.ts
+      canvas-alignment.test.ts
+      part-naming.test.ts
+      pivot-placement.test.ts
+      draw-order.test.ts
+    views/
+      view-selection.test.ts
+      height-consistency.test.ts
+      pivot-alignment.test.ts
+      topology-compatibility.test.ts
   integration/
     command-bus.test.ts
     preview-export-consistency.test.ts
     mcp-tools.test.ts
     export-pipeline.test.ts
+    layer-composite.test.ts
+    overlap-coverage.test.ts
+    view-switch-stability.test.ts
   visual/
     shadow-accuracy.test.ts
     render-output.test.ts
+    color-palette-match.test.ts
+    costume-consistency.test.ts
   benchmark/
     preview-frametime.bench.ts
     export-throughput.bench.ts
@@ -228,3 +334,4 @@ Test dài chia theo test case, không dồn vào một file.
 - [CODING_RULES.vi.md](CODING_RULES.vi.md) mục 6 — gate tự động
 - [DEFORMATION_PIPELINE.vi.md](DEFORMATION_PIPELINE.vi.md) mục 7 — test contract
 - [COMMAND_BUS.vi.md](COMMAND_BUS.vi.md) — test undo/redo và batch
+- [IMAGE_WORKFLOW.vi.md](IMAGE_WORKFLOW.vi.md) — luồng tách thành phần và tạo bộ góc
