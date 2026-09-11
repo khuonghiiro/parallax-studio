@@ -154,6 +154,9 @@ Không cần người dùng cấu hình thêm model/API sinh ảnh trong app.
 Project lưu manifest có phiên bản, asset source, các view, rig, material và clips.
 Texture atlas/thumbnail là cache tạo lại được; scene instance tham chiếu asset ID.
 Chốt schema chi tiết ở mốc 0 để tránh khóa cứng định dạng trước thử nghiệm.
+[Chi tiết schema và cấu trúc project](PROJECT_FORMAT.vi.md).
+[Kiến trúc command bus và undo/redo](COMMAND_BUS.vi.md).
+[Catalog MCP tools](MCP_TOOLS.vi.md).
 
 ## 6. Preview và export
 
@@ -164,6 +167,7 @@ Chốt schema chi tiết ở mốc 0 để tránh khóa cứng định dạng tr
   nhân đôi frame 60 FPS để gọi là render 120 FPS.
 - Thứ tự contract: chọn view → warp/morph ở rest space → bone skinning →
   instance transform → camera/shadow/render; thứ tự này phải có test.
+  [Chi tiết pipeline biến dạng](DEFORMATION_PIPELINE.vi.md).
 - Renderer gửi frame theo pipeline có bộ đệm giới hạn sang FFmpeg; hiển thị progress,
   lỗi và hủy job. Mỗi job gắn với snapshot revision.
 - Ưu tiên H.264/HEVC qua NVENC khi driver và bản FFmpeg hỗ trợ. Probe encoder thực tế
@@ -200,6 +204,7 @@ Test quan trọng: weights chuẩn hóa; xương không chu kỳ; giới hạn I
 chuyển view/topology; mask/shadow theo pose; preview/export cùng thời gian;
 UI/MCP cùng state; lưu và undo nguyên tử; ảnh nhập là kết quả thật của tool;
 output 60/120 FPS đúng frame count/timestamp, không giảm chất lượng âm thầm.
+[Chiến lược kiểm thử](TESTING_STRATEGY.vi.md).
 
 ## 8. Quy tắc code và AI
 

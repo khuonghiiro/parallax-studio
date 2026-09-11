@@ -89,6 +89,37 @@ docs/                       Kế hoạch, quy tắc, quyết định kiến trú
 Local application service xử lý command có thẩm quyền. UI dùng cùng core để preview
 khi kéo nhưng commit qua service. MCP cũng gọi service, không tạo project state riêng.
 
+### Sơ đồ phụ thuộc
+
+```mermaid
+graph TD
+  contracts["contracts"]
+  core["core"]
+  application["application"]
+  runtime["runtime"]
+  editor["editor"]
+  service["service"]
+  mcp["mcp"]
+  desktop["desktop"]
+  imagehandoff["image-handoff"]
+
+  core --> contracts
+  application --> core
+  application --> contracts
+  runtime --> core
+  runtime --> contracts
+  editor --> contracts
+  editor --> core
+  service --> application
+  mcp --> contracts
+  mcp --> application
+  desktop --> service
+  imagehandoff --> contracts
+  imagehandoff --> application
+```
+
+Mũi tên `A → B` nghĩa là A được phép import từ B. Không có mũi tên ngược.
+
 ## Ví dụ logic chung
 
 ### Lấy pose tại một frame
@@ -151,3 +182,12 @@ Không xuất toàn bộ internal qua barrel gây vòng import hoặc khó tree-
 | `engine/src/store.rs` | Đánh giá atomic persistence; không giữ command trùng service TS |
 
 Không di chuyển, sửa hoặc xóa các file trên trong lượt chỉ yêu cầu lập kế hoạch.
+
+## Liên kết
+
+- [PLAN.vi.md](PLAN.vi.md) — kế hoạch sản phẩm
+- [CODING_RULES.vi.md](CODING_RULES.vi.md) — quy tắc mã nguồn
+- [COMMAND_BUS.vi.md](COMMAND_BUS.vi.md) — command bus sử dụng application module
+- [DEFORMATION_PIPELINE.vi.md](DEFORMATION_PIPELINE.vi.md) — pipeline dùng core/runtime
+- [MCP_TOOLS.vi.md](MCP_TOOLS.vi.md) — MCP tools mapping sang application commands
+- [PROJECT_FORMAT.vi.md](PROJECT_FORMAT.vi.md) — schema dữ liệu từ contracts

@@ -8,8 +8,15 @@ and other coding agents working in this workspace.
 1. `docs/PLAN.vi.md` — current proposed product scope and implementation status.
 2. `docs/CODING_RULES.vi.md` — mandatory source structure and readability rules.
 3. `docs/MODULE_MAP.vi.md` — ownership of shared logic and allowed dependencies.
-4. `.agents/skills/parallax-development/SKILL.md` — workflow for implementing,
-   refactoring or reviewing code. Read directly if skill discovery is unavailable.
+4. `docs/PROJECT_FORMAT.vi.md` — project disk structure, manifest schema and data models.
+5. `docs/COMMAND_BUS.vi.md` — command bus, undo/redo, transaction architecture.
+6. `docs/DEFORMATION_PIPELINE.vi.md` — canonical deformation order and coordinate spaces.
+7. `docs/MCP_TOOLS.vi.md` — MCP tool catalog, schemas and idempotency rules.
+8. `docs/TESTING_STRATEGY.vi.md` — test categories, CI gates and benchmark protocol.
+9. `docs/ARCHITECTURE_DECISIONS.vi.md` — architecture decision records.
+10. `docs/GLOSSARY.vi.md` — project terminology reference.
+11. `.agents/skills/parallax-development/SKILL.md` — workflow for implementing,
+    refactoring or reviewing code. Read directly if skill discovery is unavailable.
 
 The current user request is planning and project guidance. A plan is not permission
 to resume feature development. A later explicit request to implement is permission
