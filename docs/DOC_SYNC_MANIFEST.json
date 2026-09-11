@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "canonicalDirectory": "docs_vi",
+  "translationDirectory": "docs",
+  "documents": [
+    {
+      "file": "AGENTS.md",
+      "revision": 1,
+      "reviewStatus": "synced",
+      "sourceSha256": "ead9c30b63f001b8e43462afcb72ea1e4519c1928b1f2e607a49ea56f351d271",
+      "translationSha256": "ed2b64b0c58601a2d6479a8cd1f0f6ef01ba34570a0bd1f3aa43660cf698ca6b"
+    },
+    {
+      "file": "AI_TEAM_PROTOCOL.md",
+      "revision": 1,
+      "reviewStatus": "synced",
+      "sourceSha256": "26b4523978dcdce913ded4ad1eedc5b750156f5c1ec57e98617bc7100ea3bbb7",
+      "translationSha256": "42e3253626bd8bc341a8e6c0e29a62d662416c6fb3c6555041cb935cb6a86672"
+    },
+    {
+      "file": "ARCHITECTURE_DECISIONS.md",
+      "revision": 1,
+      "reviewStatus": "needs-review",
+      "sourceSha256": "7595b75aa6e16b4e90be0fd7b5b3e0ca1f052cef9f4c6a9ebe0c0a8ecb52b353",
+      "translationSha256": "2dedf433fdffcb65a7f9f9cc9e89376cdfdf603e6c7c822b6e3b0d2fbcba7351"
+    },
+    {
+      "file": "AUTO_RIG.md",
+      "revision": 1,
+      "reviewStatus": "needs-review",
+      "sourceSha256": "bfc4d5b703921b33d08dc9c13a91b632cc507707271b3b25c9c512b3c7620b8c",
+      "translationSha256": "3dfd18a4204f6d010142e06280785ea41b3ee284dc772f075b2778109e311130"
+    },
+    {
+      "file": "CODING_RULES.md",
+      "revision": 1,
+      "reviewStatus": "needs-review",
+      "sourceSha256": "619acd69bc19cae714bc0e9f34a74e641aecec4a7d0964d527554f7d965d5490",
+      "translationSha256": "a752ecf34682a0217677bc909d6df78e53c459566e5d7c3b9018021bb499ca3a"
+    },
+    {
+      "file": "COMMAND_BUS.md",
+      "revision": 1,
+      "reviewStatus": "needs-review",
+      "sourceSha256": "f05e1ca5fbed7aeb6bdc77eefc5c0d0b1fc9e8db0bcbf2d3e4cef257db4d9c60",
+      "translationSha256": "aca8bc1a1e7c2aca0ac7ea6e9ec443c9158be10a2e0aeec439d7d172e116fda1"
+    },
+    {
+      "file": "DEFORMATION_PIPELINE.md",
+      "revision": 1,
+      "reviewStatus": "needs-review",
+      "sourceSha256": "d66103212517c03e40de3fab5870ab096617f3868f0d79d05d25d4057ce24211",
+      "translationSha256": "35217d87a6fe8f66d6cba5c935e81d8e329e3eef46db15b85f4797830d93503f"
+    },
+    {
+      "file": "DOCUMENTATION_POLICY.md",
+      "revision": 1,
+      "reviewStatus": "synced",
+      "sourceSha256": "94334f94dcb0ad7c0a087c5db87ad1ef0f0f78ebc4a643fac155cc151ab8c293",
+      "translationSha256": "c4297e335ad4e3055b3cb443f11375756f49acd403b79dce89b9b8585a1867f9"
+    },
+    {
+      "file": "GLOSSARY.md",
+      "revision": 1,
+      "reviewStatus": "needs-review",
+      "sourceSha256": "584615a460e7d9cd82a42bf7fd5781ea6cb027e9f39accc269c7c7559122e921",
+      "translationSha256": "94dc4d577c6362d2437058886c9cd8bf322f4aecdeaf70d9057f560f35414dc8"
+    },
+    {
+      "file": "IMAGE_WORKFLOW.md",
+      "revision": 1,
+      "reviewStatus": "needs-review",
+      "sourceSha256": "9372f6dcf9d7ca083decfa6f7378f1b9c1317f7a1ac6ee07a1b12922ecfc1591",
+      "translationSha256": "99b61ef1601bbd88d2a82534efd20aac120074629d94841d575eb5835cb17f5a"
+    },
+    {
+      "file": "MCP_TOOLS.md",
+      "revision": 1,
+      "reviewStatus": "needs-review",
+      "sourceSha256": "4e98636b678d1d096248f2035993922e9222bc6e4d74d42f488b6ea0ddb2c955",
+      "translationSha256": "c703c2691e1dc1d725af5b77e013cf295b085c31cd286b82c909087eed5940ee"
+    },
+    {
+      "file": "MODULE_MAP.md",
+      "revision": 1,
+      "reviewStatus": "needs-review",
+      "sourceSha256": "ce53d8716b4f78764fa971e3df22fe6a2b8bfba960b7b5997f5c61ab74c06a02",
+      "translationSha256": "e104121a47eb0e8d92a5c8f8229bfc6657fb533d0dda71a1b8d5db29fa79951f"
+    },
+    {
+      "file": "PLAN.md",
+      "revision": 1,
+      "reviewStatus": "needs-review",
+      "sourceSha256": "99e1776d217dd83aa3725e9386cb2ef9775abc47f5d71dea771bdbe436bc62b6",
+      "translationSha256": "e020e0c25a39135a0c48aa9209bc130d0d351b3bc94efd5003ba239eb4df0011"
+    },
+    {
+      "file": "PROJECT_FORMAT.md",
+      "revision": 1,
+      "reviewStatus": "needs-review",
+      "sourceSha256": "55dcdf90fc7a4e1dac284790b140e5e28df71b5e1c6270ed6c9e1c0e5a671236",
+      "translationSha256": "05163893f550d047fdbcc2a9addad41919a63818f85765fc1975abd987f43d69"
+    },
+    {
+      "file": "RENDER_PROFILES.md",
+      "revision": 1,
+      "reviewStatus": "needs-review",
+      "sourceSha256": "6c38e3f88c7cccbbc0a41f966f82975e41c9d194d3a7d07ac5d3308ae43c445e",
+      "translationSha256": "2550eb86cf5c9cfe71113dbdc59ea2763d0ae0763c29cfd55691889102e40ad8"
+    },
+    {
+      "file": "TESTING_STRATEGY.md",
+      "revision": 1,
+      "reviewStatus": "needs-review",
+      "sourceSha256": "bc6f3ca72dd3a895ab8f5e616b7fbd115037d0e5b81aa14d7f468de928a3c4ca",
+      "translationSha256": "1856d4b1d1e069f592a1ad918c9a68ca6dea54bd05482352006f21ad6cd279b2"
+    },
+    {
+      "file": "UI_SPECIFICATION.md",
+      "revision": 1,
+      "reviewStatus": "needs-review",
+      "sourceSha256": "920f8a64e2634e51532e4c33ac5725ccd031b00234d096c9af694743f6c3ebbd",
+      "translationSha256": "0cb1f4c942526c28aff45120e4339c89224418458b271a4accf1f2e3b4601445"
+    }
+  ]
+}

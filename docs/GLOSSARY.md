@@ -1,274 +1,282 @@
-# Parallax Studio — Technical Glossary
+# Parallax Studio Glossary
 
-Alphabetical reference of domain and architectural terminology with concise explanations
-and cross-document references.
+Terms are listed alphabetically. Each entry gives the English name, a short
+explanation, and related documentation.
 
 ## A
 
 ### Asset
-A self-contained production resource: a character, prop, or background scene card.
-Contains layer graphics, multi-angle view sets, skeletal rigs, meshes, and material maps.
-Identified by a persistent UUID.
+The resource unit for a character, prop, or background. It contains layers,
+views, a rig, a mesh, and materials. Each asset has its own UUID.
 → [PROJECT_FORMAT.md](PROJECT_FORMAT.md), [PLAN.md](PLAN.md) section 2.
 
-### Alpha Mask
-A 1-channel grayscale image or dedicated alpha channel defining layer transparency.
-Employed for dynamic silhouette shadow generation and compositing.
-Faux checkerboard patterns drawn into pixel data are rejected as invalid alpha.
+### Alpha mask
+A grayscale image or alpha channel that defines the transparent region of a
+layer. It is used for silhouette shadows and compositing. A checkerboard
+background drawn into the image is not valid alpha.
 → [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) section 5.
 
 ## B
 
-### Batch (Command Batch)
-An atomic composite of multiple commands executed transactionally: all succeed or all roll back.
-Produces a single discrete entry in the undo/redo history stack.
+### Batch (command)
+A group of commands executed atomically: all succeed or the entire batch is
+rolled back. It creates a single entry in the history stack.
 → [COMMAND_BUS.md](COMMAND_BUS.md) section 5.
 
-### Bind Pose
-The baseline reference posture of a skeletal hierarchy when skin weights are calculated.
-Inverse bind matrices are derived from the bind pose. Synonymous with rest pose in this domain.
-→ [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 2 step 3.
+### Bind pose
+The reference pose of the skeleton when weights are created. The
+InverseBindMatrix is calculated from the bind pose. It is synonymous with rest
+pose in this context.
+→ [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 2, step 3.
 
 ### Bone
-A rigid skeletal segment defined by local position offset, rotation angle, length, and parent joint.
-Forms an acyclic tree hierarchy that drives vertex positions via skin weights.
+A skeleton segment defined by position, rotation, length, and parent. Bones
+form an acyclic tree hierarchy and control vertex positions through skin
+weights.
 → [PLAN.md](PLAN.md) section 2, [MODULE_MAP.md](MODULE_MAP.md).
 
 ## C
 
-### Camera Framing
-The viewing frustum within a scene, parameterized by camera projection type (orthographic or perspective),
-position coordinates, zoom factor, and near/far clipping planes.
-Governs depth parallax intensity and compositional framing.
+### Camera framing
+The camera's visible region in a scene, defined by its type
+(orthographic/perspective), position, zoom, and near/far planes. It affects
+parallax and the safe area.
 → [PLAN.md](PLAN.md) section 4.
 
 ### Clip
-A discrete animation block placed on a timeline track, defined by start time, duration, and keyframe sequences.
-Clips can be instanced and shared across multiple scene targets.
+An animation segment on a track with a start time, an end time, and a list of
+keyframes. A clip can be reused by multiple instances.
 → [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 5.
 
 ### Command
-An immutable data object encapsulating an intent to mutate project state.
-Contains command type, payload, unique commandId, and target baseRevision.
-Dispatched exclusively through the Command Bus.
+An immutable object describing the intent to change project state. It has a
+type, payload, commandId, and baseRevision, and is executed through the command
+bus.
 → [COMMAND_BUS.md](COMMAND_BUS.md) section 2.
 
-### Command Bus
-The single authoritative dispatch pipeline for all state mutations.
-Editor UI and MCP tools invoke identical commands through this bus.
-Enforces schema validation, monotonic revision sequencing, undo history, and rollback.
+### Command bus
+The single orchestration layer for every state change. Both UI and MCP dispatch
+commands through it. It is responsible for validation, execution, history, and
+revision.
 → [COMMAND_BUS.md](COMMAND_BUS.md).
 
 ## D
 
-### Deformation Pipeline
-The deterministic, ordered transformation pipeline applied to meshes:
-`View Selection → Rest-Space Warp/Morph → Bone Skinning → Instance Transform → Camera / Shadow Pass → Frame Render`.
+### Deformation pipeline
+The mesh-deformation sequence in a fixed order: view selection → warp/morph →
+bone skinning → instance transform → camera → shadow → render.
 → [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md).
 
-### Depth (Z-Depth)
-The planar depth coordinate of an instance within a 2.5D scene.
-Dictates rendering draw order and relative parallax motion without introducing true 3D volumetric models.
+### Depth (z)
+The depth value of an instance in the scene. It determines draw order and the
+amount of parallax relative to the camera. It does not create real 3D volume.
 → [PLAN.md](PLAN.md) section 4.
 
-### Draw Order
-The layer stacking hierarchy within an asset view. Layers with higher draw indices render atop lower indices.
-Each view set maintains independent draw ordering.
+### Draw order
+The order in which layers in an asset are drawn. A layer with a higher draw
+order is drawn over a lower layer. Each view has its own draw order.
 → [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 3.
 
 ## E
 
 ### Easing
-Mathematical interpolation functions between adjacent keyframes (linear, ease-in, ease-out, cubic bezier).
-Dictates the rate of parameter change over time.
+A function that smooths interpolation between two keyframes: linear, ease-in,
+ease-out, or cubic Bezier. It defines how quickly a value changes over time.
 → [MODULE_MAP.md](MODULE_MAP.md) — `core/animation/`.
 
-### Export FPS
-Refer to **Output FPS**.
+### Export FPS → see Output FPS.
 
 ## F
 
-### Frame Index
-An integer index (0, 1, 2...) of a discrete frame in video export:
-`timestamp = frameIndex / outputFps`.
+### Frame index
+An integer frame index (0, 1, 2...) in an exported video. Its relationship to
+time is `time = frameIndex / outputFps`.
 → [RENDER_PROFILES.md](RENDER_PROFILES.md) section 2.
 
 ## H
 
-### Hysteresis Threshold
-A directional angular buffer (default ±5°) applied to camera view switching.
-Prevents rapid flickering when the camera angle hovers near view set transition boundaries.
-→ [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 2 step 1.
+### Hysteresis threshold
+A stability threshold used during view switching to prevent flicker when the
+view angle oscillates around the boundary between two views. The default is
+±5°.
+→ [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 2, step 1.
 
 ## I
 
 ### Instance
-A scene-level placement of an asset, defined by world position, rotation, scale, and z-depth.
-Multiple instances can reference a single underlying asset ID.
+A placement of an asset in a scene. It has position, rotation, scale, and
+depth. Multiple instances can reference the same asset.
 → [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 4.
 
-### Inverse Command
-The compensating mutation executed during undo operations.
-If command A adds a bone, inverse command A deletes that bone.
+### Inverse command
+The opposite command used for undo. When command A adds a bone, inverse A
+deletes that bone.
 → [COMMAND_BUS.md](COMMAND_BUS.md) section 6.
 
 ## K
 
 ### Keyframe
-An anchored parameter value at a discrete timestamp on the timeline.
-Values between keyframes are interpolated according to easing curves.
+A value anchor at a specific point on the timeline. Values between two
+keyframes are interpolated according to an easing function.
 → [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 5.
 
 ## L
 
 ### Layer
-A distinct artwork element within an asset (color image, alpha mask, optional normal map).
-Named by anatomical function: `head`, `torso`, `left_upper_arm`.
+An image layer in an asset: a color image, an alpha mask, and an optional normal
+map. The layer name describes the part, such as `head`, `torso`, or `left-arm`.
 → [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 3.
 
 ### Linear Blend Skinning (LBS)
-The vertex deformation algorithm computing weighted linear combinations of bone transform matrices.
-Constrained to a maximum of 4 bone influences per vertex.
-Subject to volume collapse artifacts at rotational angles exceeding 180°.
-→ [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 2 step 3.
+An algorithm that deforms vertices according to bone weights. Each vertex is
+influenced by no more than four bones. It has a candy-wrapper artifact when a
+bone rotates more than 180°.
+→ [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 2, step 3.
 
 ## M
 
 ### Manifest
-The root `manifest.json` file on disk. Contains schema version, asset registry,
-scene registry, global revision counter, and default render presets.
+The `manifest.json` file at the project root. It contains the schema version,
+asset registry, scene registry, revision, and defaults.
 → [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 2.
 
-### Morph Target
-A set of vertex position delta vectors representing an expression or secondary deformation.
-Applied additively using scalar blend weights. Requires matching mesh topology.
+### Morph target
+A set of vertex-position deltas for a specific expression or deformation. It
+is applied additively with a blend weight and requires compatible topology.
 → [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 6.
 
 ## N
 
-### Normal Map
-An RGB texture encoding per-pixel surface normal vectors to simulate depth under dynamic lighting.
-Alters directional light response without generating occluded physical geometry.
+### Normal map
+An image that encodes surface directions to create a sense of volume under
+lighting. It changes only the lighting response; it does not create actual
+geometry or occluded angles.
 → [PLAN.md](PLAN.md) section 2.
 
 ### NVENC
-NVIDIA dedicated hardware video encoder for H.264 and HEVC codecs.
-Prioritized when GPU drivers support it; CPU software encoders act as deterministic fallbacks.
+NVIDIA's hardware encoder for H.264/HEVC. It is preferred when the driver
+supports it, with a software-encoder fallback.
 → [RENDER_PROFILES.md](RENDER_PROFILES.md) section 3.
 
 ## O
 
 ### Output FPS
-The framerate of the exported video file (24, 30, 60, 120 FPS).
-Governs sample timestamps and total frame count independently of viewport preview speed.
+The frame rate of the exported video file (24/30/60/120). It determines frame
+count and timestamps and is independent of actual render speed and preview FPS.
 → [RENDER_PROFILES.md](RENDER_PROFILES.md) section 2.
 
 ## P
 
 ### Parallax
-The perceived relative displacement between background and foreground cards as the camera translates.
-Produced through planar depth offsets and camera projections without 3D geometry.
+The effect in which layers at different depths move relative to one another
+when the camera moves. It is achieved through depth values and camera
+projection without requiring a 3D model.
 → [PLAN.md](PLAN.md) section 4.
 
 ### Pivot
-The local coordinate origin `{ x, y }` of an asset or layer, serving as the center of rotation and scale.
-Calibrated independently per view angle.
+The origin of an asset or layer, used as the center of rotation and a position
+reference. Each view has its own pivot.
 → [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 3.
 
 ### Pose
-The evaluated composite state of an asset at a given timestamp:
-bone matrices + warp grid offsets + morph target weights + active view selection.
+The combined state at a point in time: bone transforms, warp parameters, morph
+weights, and view selection. It is the result of the pose evaluator.
 → [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 4.
 
 ### Preview FPS
-The target framerate of the interactive editor viewport (default 60 FPS).
-May drop frames or downscale resolution under load without affecting output export.
+The target frame rate for the editor viewport (60 by default). Resolution may
+be reduced or frames skipped under heavy load. It differs from output FPS.
 → [RENDER_PROFILES.md](RENDER_PROFILES.md) section 2.
 
 ## R
 
-### Rest Pose / Rest Space
-The default unposed geometry and coordinate space of a mesh prior to deformation.
-Warp deformers and morph targets execute in rest space before skeletal skinning.
-→ [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 2 step 2.
+### Rest pose / Rest space
+The default pose and coordinate space of the mesh before animation is applied.
+Warp and morph operate in rest space before bone skinning.
+→ [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 2, step 2.
 
 ### Revision
-A monotonically increasing integer incremented upon every committed command.
-Enforces concurrency control, export snapshot isolation, and undo tracking.
+An integer incremented each time a command commits successfully. It is used for
+conflict detection, export snapshots, and undo tracking.
 → [COMMAND_BUS.md](COMMAND_BUS.md) section 7.
 
 ## S
 
 ### Scene
-A staging canvas containing placed instances, cameras, directional lights, and shadow planes.
-Maintains its own multi-track timeline.
+A staging space containing instances, a camera, lights, and shadow receivers.
+Each scene has its own timeline.
 → [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 4.
 
-### Shadow Proxy
-A simplified planar proxy geometry used to cast approximate volumetric shadows for 2D cards.
-Reserved for post-V1 enhancement.
+### Shadow proxy
+A simple auxiliary mesh used to create a shadow with a greater sense of volume
+for a flat card. It is an extension after the first release.
 → [PLAN.md](PLAN.md) section 4.
 
-### Shadow Receiver
-A planar backdrop or ground element configured in the 2.5D scene to capture projected shadows.
-Provided by the engine without requiring custom 3D modeling.
+### Shadow receiver
+A simple plane, such as a floor or wall, in the scene that receives shadows
+from characters and props. The app provides it; the user does not need to
+create a 3D model.
 → [PLAN.md](PLAN.md) section 4.
 
 ### Shot
-A discrete narrative segment on the timeline bound to a specific camera framing and time range.
-→ [PLAN.md](PLAN.md) section 7 milestone 3.
+A film segment on the timeline corresponding to one camera setup and time
+range. A timeline can contain multiple consecutive shots.
+→ [PLAN.md](PLAN.md) section 7, milestone 3.
 
-### Skinning
-Refer to **Linear Blend Skinning**.
+### Skinning → see Linear Blend Skinning.
 
-### Snapshot Revision
-The project revision frozen at the moment an export job begins.
-Ensures all rendered frames derive from a strictly immutable scene state.
+### Snapshot revision
+The revision at the moment an export job starts. It ensures every frame in one
+job is rendered from the same scene state.
 → [RENDER_PROFILES.md](RENDER_PROFILES.md) section 5.
 
 ## T
 
 ### Timeline
-The temporal sequencer containing tracks, clips, and keyframes, denominated in fractional seconds.
-Converted to discrete frames via `frameIndex = time * fps`.
+A time axis containing tracks, clips, and keyframes. Time is measured in
+seconds and converted to a frame index through `frameIndex = time × fps`.
 → [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 5.
 
 ### Timeline FPS
-The editing subdivision unit used when placing keyframes and snapping clips (e.g., 24 FPS).
+The frame division used when the user places keyframes and clips. At 24 FPS,
+for example, keyframes snap to multiples of 1/24 second.
 → [RENDER_PROFILES.md](RENDER_PROFILES.md) section 2.
 
 ### Topology
-The geometric mesh graph: vertex count, edge loops, and triangle index buffers.
-Morph targets and blend transitions require identical, compatible topologies.
+The connectivity structure of a mesh: its vertex count and triangle indices.
+Morphing works only between meshes with compatible topology, meaning the same
+vertex count and the same indices.
 → [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 6.
 
 ### Track
-A timeline lane bound to an animation target (instance, camera parameter, light property).
-Contains keyframes and clips.
+A timeline lane associated with a target such as an instance, camera, or light.
+It contains one or more clips.
 → [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 5.
 
 ## V
 
-### View / View Set
-The collection of camera perspectives for a 2D asset: front, quarter-left, quarter-right, profile, back.
-Each view encapsulates independent layers, meshes, skin bindings, and pivots.
-Transitions triggered by camera orientation or explicit animator parameters.
-→ [PLAN.md](PLAN.md) section 2, [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) step 1.
+### View / View set
+An asset's set of viewing angles: front, quarter-left, quarter-right, side, and
+back. Each view has its own layers, mesh, bindings, and pivot. The view switches
+according to camera direction or a control parameter.
+→ [PLAN.md](PLAN.md) section 2, [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md)
+step 1.
 
 ## W
 
-### Warp Grid
-An N×M control point lattice used to deform 2D meshes prior to skeletal skinning.
-Vertices interpolate bilinear offsets from bounding grid cells.
-Employed for subtle facial turns, eye blinks, and squash-and-stretch dynamics.
+### Warp grid
+An n×m control grid used to deform a mesh before skinning. A control point has
+an offset; each vertex is bilinearly interpolated from the four corners of its
+containing cell. It is used for subtle face turns and squash/stretch.
 → [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 5.
 
-### Weights / Skin Weights
-Scalar coefficients determining the influence of specific bones on individual vertices.
-Constrained to a maximum of 4 bones per vertex with normalized sum equal to 1.0.
-→ [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 2 step 3.
+### Weights / Skin weights
+Weights that determine how much each bone influences each vertex. A vertex is
+influenced by no more than four bones. The weights for each vertex sum to 1.0.
+→ [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 2, step 3.
 
-### World Space
-The common coordinate space of the 2.5D scene. Origin centered at `(0, 0, 0)`,
-+X right, +Y up, +Z toward camera. Evaluated after instance transforms and prior to camera projection.
+### World space
+The scene's shared coordinate space. Its origin is at the scene center, with
+X→, Y↑, and Z+ pointing outward. Its unit is the pixel (scene unit). It comes
+after the instance transform and before the camera transform.
 → [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 3.

@@ -228,6 +228,11 @@ Antigravity có workspace rule trong `.agents/rules`. Adapter client dẫn về 
 quy tắc chung. [Codex rules][codex-rules], [skills][codex-skills],
 [Antigravity rules][anti-rules], [skills][anti-skills].
 
+Task lớn có thể chia cho specialist theo phạm vi độc lập. Lead chốt contract,
+giao một write owner cho mỗi file, tích hợp kết quả và chạy kiểm tra cuối; không
+gọi toàn bộ vai trò cho task nhỏ. Chi tiết nằm trong
+[giao thức team AI](AI_TEAM_PROTOCOL.md).
+
 ## 9. Phạm vi hiện tại
 
 Bản đầu không gồm Blender/Godot, GLB editor, dựng model 3D, cloth/fluid, lip-sync

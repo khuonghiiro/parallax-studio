@@ -1,95 +1,159 @@
-# Parallax Studio — Project Instructions & Engineering Standard
+# Parallax Studio — Project Instructions
 
-Read this file before changing the project. It applies to Codex, Antigravity
-and other coding agents working in this workspace.
+Read this file before changing the repository. It applies to Codex,
+Antigravity, and other coding agents working in this workspace.
 
-## 1. Operating Mindset — Autonomous Engineering Team
+## 1. Instruction priority and documentation language
 
-Internally think, plan, and evaluate as a coordinated engineering team through 6 cognitive lenses
-(within a single agent session — do NOT create subagents unless explicitly requested):
-1. **Architect**: Clean separation of concerns, single Three.js renderer, Command Bus consistency.
-2. **Product & UX Designer**: High-density desktop tool (Blender/Spine/Figma feel), strictly NO AI-slop.
-3. **Core & Graphics Engineer**: 2.5D math, Earcut triangulation, deformation pipeline, 800-line limits.
-4. **Desktop & Integration Engineer**: Tauri shell, FFmpeg NVENC 2K/4K 60/120 FPS, MCP SDK tools.
-5. **QA Engineer**: Functional edge cases, boundary values, test invariant verification, regression check.
-6. **Code Reviewer**: Existing-code-first, no dead code or speculative abstractions, high readability.
+Follow direct system, developer, and user instructions first. Within the
+repository, a more deeply nested `AGENTS.md` applies to its directory tree and
+takes precedence over this root file when the instructions are compatible with
+the user's request.
 
-Do not behave like a code generator that blindly follows instructions.
-Build a real, maintainable product — not a collection of generated files.
+The documentation has one canonical language and one AI-facing translation:
 
-## 2. Read the relevant source of truth (docs/ and docs_vi/)
+- `docs_vi/` is the canonical product and technical specification reviewed by
+  the user.
+- `docs/` is the English translation intended for coding agents.
+- The two files with the same name must express the same requirements,
+  decisions, statuses, limits, and acceptance criteria.
+- If the translations disagree, `docs_vi/` wins. Reconcile the English copy in
+  the same documentation change.
+- Do not introduce a product decision only in `docs/`.
 
-Canonical English technical documentation for AI coding agents resides in `docs/`.
-Vietnamese documentation for user inspection and project review resides in `docs_vi/`.
+Read `docs/DOCUMENTATION_POLICY.md` before editing documentation and
+`docs/AI_TEAM_PROTOCOL.md` before delegating project work.
 
-1. `docs/PLAN.md` (`docs_vi/PLAN.md`) — product scope, milestones and implementation plan.
-2. `docs/CODING_RULES.md` (`docs_vi/CODING_RULES.md`) — mandatory source structure and readability rules (max 800 physical lines).
-3. `docs/MODULE_MAP.md` (`docs_vi/MODULE_MAP.md`) — package ownership, directory layout and dependency rules.
-4. `docs/PROJECT_FORMAT.md` (`docs_vi/PROJECT_FORMAT.md`) — disk structure, manifest, rig, landmarks and mesh format.
-5. `docs/COMMAND_BUS.md` (`docs_vi/COMMAND_BUS.md`) — command bus, undo/redo, revision and transaction architecture.
-6. `docs/DEFORMATION_PIPELINE.md` (`docs_vi/DEFORMATION_PIPELINE.md`) — canonical deformation order and coordinate spaces.
-7. `docs/MCP_TOOLS.md` (`docs_vi/MCP_TOOLS.md`) — MCP tool catalog, schemas and idempotency rules.
-8. `docs/TESTING_STRATEGY.md` (`docs_vi/TESTING_STRATEGY.md`) — test categories, CI gates and benchmark protocol.
-9. `docs/ARCHITECTURE_DECISIONS.md` (`docs_vi/ARCHITECTURE_DECISIONS.md`) — architecture decision records (ADR-001 to ADR-009).
-10. `docs/GLOSSARY.md` (`docs_vi/GLOSSARY.md`) — project terminology reference.
-11. `docs/AUTO_RIG.md` (`docs_vi/AUTO_RIG.md`) — Mixamo-style auto-rig: landmarks, skeleton, auto-weights, templates.
-12. `docs/IMAGE_WORKFLOW.md` (`docs_vi/IMAGE_WORKFLOW.md`) — AI image creation, part decomposition, mesh generation.
-13. `docs/RENDER_PROFILES.md` (`docs_vi/RENDER_PROFILES.md`) — output resolution/FPS presets and RTX 3060 targets.
-14. `docs/UI_SPECIFICATION.md` (`docs_vi/UI_SPECIFICATION.md`) — dual-mode UI (Setup/Animate), panels, Lucide + SVG icons.
-15. `.agents/skills/parallax-development/SKILL.md` — implementation and refactoring workflow.
+## 2. Operate as a coordinated engineering team
 
-The current user request is planning and project guidance. A plan is not permission
-to resume feature development. A later explicit request to implement is permission
-to proceed; do not request duplicate approval because a document still says pending.
+The user authorizes bounded subagent delegation for this repository. The lead
+agent remains accountable for scope, architecture, integration, validation,
+and the final report.
 
-## 3. Essential Constraints & Principles
+Delegate only when independent work can materially improve speed or quality.
+Do not spawn every specialist for every task. A small change in one module
+normally has one owner.
 
-- **2D/2.5D Focus**: Image-based 2D assets and 2.5D filmmaking. No dependency on Blender, Godot or full 3D authoring.
-- **AI Image Creation**: Uses AI client's available tool + MCP ingestion (`docs/IMAGE_WORKFLOW.md`); no app-owned model/API.
-- **Output Standards**: 2K/4K at 60/120 FPS with NVIDIA RTX 3060 targets (`docs/RENDER_PROFILES.md`). Export FPS is separate from preview.
-- **Strict 800-Line Limit**: Every handwritten source file must contain at most 800 physical lines including comments and blanks. Never compress or minify code to bypass limits.
-- **Existing Code First**: Before adding any service, component, helper, model or utility:
-  ```text
-  REUSE → EXTEND → REFACTOR → CREATE NEW
-  ```
-  Search for existing owners before adding logic. Do not duplicate algorithms between UI/MCP or browser/native.
-- **Unified Logic**: UI and MCP call the same application commands. Preview and export share the same Three.js deformation pipeline.
-- **Language**: Explain results to the user in Vietnamese unless requested otherwise.
-- **No Subagents**: Do not create subagents unless the user explicitly requests delegation.
+Available role charters live in `.agents/agents/` and `.codex/agents/`:
 
-## 4. UI/UX Anti-AI-Slop Rules
+- `product-spec`: product workflow, filmmaking requirements, and specifications.
+- `graphics-animation`: geometry, rigging, deformation, animation, and runtime.
+- `editor-ux`: editor UI, viewport interaction, timeline, and design system.
+- `application-mcp`: Application Service, Command Bus, jobs, and MCP adapters.
+- `desktop-export`: Tauri, Rust, FFmpeg, GPU export, and packaging.
+- `qa-reviewer`: independent correctness, security, performance, and regression review.
+- `spec-translator`: faithful synchronization from `docs_vi/` to `docs/`.
 
-Follow `docs/UI_SPECIFICATION.md`. Prioritize desktop workflow efficiency and information density:
-- **Prohibited by default**: Generic SaaS aesthetics, purple/blue gradient buttons, excessive card containers, glassmorphism without purpose, decorative blobs, excessive whitespace.
-- **Design Inspiration**: Blender, Figma, Spine 2D, Live2D Cubism, Rive, VS Code.
-- **Icon System**:
-  1. Primary: Lucide Icons (stroke 2px, 24×24, `currentColor`, ISC license).
-  2. Fallback: Custom inline SVG following the same 24×24 stroke outline spec.
-  3. NEVER use OS-native icons (Segoe MDL2 / SF Symbols) or emoji to ensure cross-platform consistency.
+For delegated work:
 
-## 5. Verification Commands & Definition of Done
+1. Give each agent a bounded objective, owned files, required documents,
+   acceptance criteria, verification commands, and excluded files.
+2. Assign one write owner per file. Parallel agents must not edit overlapping
+   files or duplicate the same business rule.
+3. Stabilize shared contracts and ADRs before parallel implementation that
+   depends on them.
+4. Prefer isolated worktrees when the host supports them. In a shared working
+   directory, parallelize read-only research and non-overlapping edits only.
+5. The lead reviews all results, resolves conflicts, integrates the change, and
+   runs the final relevant checks.
+6. Subagents do not recursively delegate unless the lead explicitly assigns a
+   multi-level effort.
 
-Current verification commands (do not require installing dependencies):
+## 3. Read the relevant source of truth
+
+Always read these English mirrors before source changes, then consult the
+canonical Vietnamese file when a requirement is unclear or under review:
+
+1. `docs/PLAN.md` — product scope, milestones, and implementation status.
+2. `docs/CODING_RULES.md` — mandatory readability and source structure rules.
+3. `docs/MODULE_MAP.md` — module ownership and allowed dependencies.
+4. `.agents/skills/parallax-development/SKILL.md` — implementation and review workflow.
+
+Load additional documents by task instead of loading the entire documentation
+set:
+
+| Work area | Required documents |
+| --- | --- |
+| Project persistence or contracts | `PROJECT_FORMAT.md`, `COMMAND_BUS.md` |
+| Rigging or mesh generation | `AUTO_RIG.md`, `IMAGE_WORKFLOW.md` |
+| Animation or rendering | `DEFORMATION_PIPELINE.md`, `RENDER_PROFILES.md` |
+| MCP integration | `MCP_TOOLS.md`, `COMMAND_BUS.md`, `IMAGE_WORKFLOW.md` |
+| Editor UI | `UI_SPECIFICATION.md`, `COMMAND_BUS.md` |
+| Architecture decision | `ARCHITECTURE_DECISIONS.md`, relevant domain documents |
+| Testing or review | `TESTING_STRATEGY.md`, relevant domain documents |
+
+A planning or review request does not authorize feature implementation. A
+later explicit implementation or correction request is authorization to
+proceed within that scope; do not request duplicate approval because a plan or
+ADR still says proposed.
+
+## 4. Product and architecture constraints
+
+- Focus on image-based 2D assets and 2.5D filmmaking. The first release does
+  not depend on Blender, Godot, or full 3D model authoring.
+- AI image creation uses the connected client's image capability plus artifact
+  ingestion. Do not silently add an app-owned model service or API key.
+- UI and MCP call the same application commands. They must not implement
+  separate business rules.
+- Preview and export use the same animation sampling and deformation pipeline.
+- Keep durable project mutations, ephemeral editor state, and read/evaluation
+  operations separate.
+- A drag, brush stroke, or scrub gesture may preview continuously but commits at
+  a deliberate boundary so history and revision are not flooded.
+- Treat project files, imported media, MCP payloads, and process arguments as
+  untrusted input.
+
+## 5. Source quality and ownership
+
+- Every handwritten source file contains at most 800 physical lines, including
+  comments and blank lines. Never compress or minify code to bypass the limit.
+- Split files by cohesive responsibility before they approach the limit.
+- Use descriptive identifiers, multiline function bodies, and normal formatter
+  output. The compressed legacy draft is not a style precedent.
+- Before adding a service, component, helper, schema, or utility, search for its
+  existing owner. Prefer `REUSE → EXTEND → REFACTOR → CREATE NEW`.
+- Shared algorithms and business rules belong to the domain owner named in the
+  module map, not a generic utilities file.
+- Do not create numbered fragments, broad dumping-ground modules, empty
+  scaffolding, or speculative abstractions.
+- Update the module map and paired documentation when ownership or a public
+  interface changes.
+
+## 6. UI expectations
+
+For UI work, follow `docs/UI_SPECIFICATION.md` and the nearest scoped
+instructions. Build a dense professional desktop workflow with clear hierarchy,
+keyboard access, and consistent states. Avoid generic SaaS dashboards, excessive
+cards, gradients, glass effects, decorative elements, and arbitrary styling.
+
+Loading, error, empty, disabled, focus, and resizing states are required when
+they apply to the UI being changed; they are not a universal requirement for
+documentation, algorithms, or tooling tasks.
+
+## 7. Verification and reporting
+
+Inspect actual scripts and installed dependencies before claiming a command can
+run. Run checks that meaningfully cover the changed behavior, then review the
+diff for scope, duplication, ownership, and readability.
+
+Current dependency-free quality commands include:
 
 ```sh
 node scripts/quality/check-source-limits.mjs
 node --test scripts/quality/source-limits.test.mjs
+node scripts/quality/check-doc-sync.mjs
+node --test scripts/quality/doc-sync.test.mjs
 ```
 
-The source check should expose readability problems in the old draft. Do not hide
-those files with exclusions or claim the app passed validation. For planning-only
-changes, report the findings without starting a full refactor. For authorized
-implementation, apply the relevant checks in the coding rules.
+The source check intentionally exposes readability failures in the compressed
+legacy draft. Do not hide those files with exclusions or report a passing
+baseline when failures remain.
 
-Existing npm scripts refer to unfinished files. Inspect actual files and installed
-dependencies before claiming a command runs or a product feature works.
+A completed task reports:
 
-### Definition of Done
+- what changed and why;
+- files or modules affected;
+- validation actually run and its result;
+- known limitations or pre-existing failures relevant to the result.
 
-A task is DONE only when:
-1. Target functionality meets specification and matches architectural decisions.
-2. Code strictly respects the 800 physical line limit and readability standards.
-3. No duplicate logic created between UI, MCP, and Core runtime.
-4. UI handles loading, error, empty, disabled, and responsive states cleanly.
-5. Verification commands pass without regression.
-6. "Code compiles" alone is never the Definition of Done.
+Explain results to the user in Vietnamese unless requested otherwise.

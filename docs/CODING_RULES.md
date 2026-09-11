@@ -1,41 +1,53 @@
-# Parallax Studio — Source Code & Engineering Rules
+# Parallax Studio source-code rules
 
-This document is the canonical technical rulebook for AI agents and human contributors
-working in this repository. Mandatory engineering rules take effect immediately.
+This is the shared rule source for AI agents and people who edit code in the
+project. User-requested rules take effect immediately; the product architecture
+remains a proposal awaiting approval.
 
-## 1. File Size Limits & Separation of Concerns
+This file is the English translation of the canonical Vietnamese file at
+`docs_vi/CODING_RULES.md`; changes must remain synchronized according to the
+[documentation policy](DOCUMENTATION_POLICY.md).
 
-- Every handwritten source file must not exceed **800 physical lines**, including
-  comments, docstrings, and blank lines.
-- The trailing newline does not create a phantom line; all actual blank lines are counted.
-- This applies strictly to web app code, backend services, MCP tools, unit tests,
-  utility scripts, GLSL shaders, and handwritten configurations.
-- Generated code, build artifacts, lockfiles, and external vendor dependencies are exempt.
-  Exemptions must have documented origins and must never be used to conceal business logic.
-- A line count of **400–500 physical lines** serves as a proactive signal to inspect and
-  decouple responsibilities before file bloat occurs.
-- Modularize by cohesive concern (e.g., `camera-controller.ts`, `shadow-pass.ts`, `texture-cache.ts`).
-  Never split arbitrarily into `part1.ts` or `part2.ts` solely to bypass line limits.
-- Large shared files must be decomposed into domain-specific modules. Never aggregate
-  unrelated domain logic into monolithic dumpsters like `utils.ts`, `helpers.ts`, or `common.ts`.
+## 1. File limits and responsibilities
 
-## 2. Mandatory Readability Standards
+- A handwritten source file must not exceed **800 physical lines**.
+- Blank lines and comments count. A final newline does not create a phantom blank
+  line; actual blank lines still count.
+- This applies to the app, backend, MCP, tests, scripts, shaders, and handwritten
+  configuration.
+- Dependencies, build output, lockfiles, and generated code are not edited by hand.
+  An exclusion must identify its generator and location; it must not hide business
+  logic.
+- Around 400–500 lines is a signal to review responsibilities, not a target size.
+- Split by responsibility: `camera-controller.ts`, `shadow-pass.ts`,
+  `texture-cache.ts`. Do not split into `part1.ts` and `part2.ts` merely to reduce
+  line count.
+- A large shared file must be split further by domain and public API. Do not collect
+  unrelated concerns in `utils.ts`, `helpers.ts`, `common.ts`, or `manager.ts`.
 
-- One statement per line. Function bodies, if/else branches, and loops must use multiline blocks.
-- Single-expression callbacks like `(node) => node.id` are permitted inline. Complex,
-  multi-step callbacks must use multiline blocks or named functions.
-- Do not compress multiple variable declarations, state hooks, or exports onto a single line.
-- Complex JSX structures must be multiline with decoupled sub-components.
-- Nested ternary expressions are prohibited. Use early return guard clauses or descriptive variables.
-- Avoid bulky inline object types in generic call sites. Reusable types belong in contracts or domain definitions.
-- Use explicit, descriptive naming: `asset`, `sceneNode`, `frameIndex`, `requestBody`. Avoid cryptic abbreviations
-  like `a`, `n`, `s`, `p` in business logic (short variable names are allowed only in concise mathematical loops).
-- Comments must provide technical rationale, physical units, coordinate spaces, ownership, or boundary constraints—not
-  just repeat what the code obviously does.
-- Public APIs must declare explicit return types. Do not use `any`, forced type casts, or non-null assertions
-  (`!`) to conceal incomplete architectural designs. Handle null and empty states explicitly.
+## 2. Readability is mandatory
 
-### Canonical Style Example
+- Put each statement on its own line; function bodies, if/else branches, and loops
+  use multiline blocks.
+- A pure single-operation callback such as `(node) => node.id` may be concise. A
+  callback with multiple steps must use a multiline block or a named function.
+- Do not place multiple state declarations, variables, or hooks on one line.
+- JSX with multiple elements must be multiline, with components split by
+  responsibility.
+- Do not nest ternaries. Use guard clauses or named variables for complex
+  conditions.
+- Do not place a long object type inside a generic or call site. A type used in
+  multiple places belongs to its owning contract or domain and must not be
+  redeclared by each caller.
+- Names describe meaning: `asset`, `sceneNode`, `frameIndex`, `requestBody`; avoid
+  `a`, `n`, `s`, and `p` in business logic. Short names are acceptable in
+  mathematical code or loops when the context is clear.
+- Comments explain rationale, units, coordinate systems, ownership, or limits;
+  they do not merely restate an instruction.
+- Public APIs have explicit return types. Do not use `any`, casts, or non-null
+  assertions to conceal design errors. Handle missing-data states explicitly.
+
+Example of acceptable style (illustrative, not an implemented API):
 
 ```ts
 import type { SessionInfo } from '@parallax/contracts/session';
@@ -48,7 +60,9 @@ export class SessionClient {
 
   async connect(): Promise<SessionInfo> {
     const session = await this.httpClient.get<SessionInfo>('/api/session');
+
     this.token = session.token;
+
     return session;
   }
 
@@ -58,80 +72,125 @@ export class SessionClient {
 }
 ```
 
-Standard file organization:
-`imports` → `local types/interfaces` → `constants` → `public API/classes` → `private helpers`.
+`SessionInfo` has one definition in contracts. `HttpClient` owns HTTP behavior,
+error parsing, and timeouts. `SessionClient` keeps a token per instance rather than
+using a global token shared by multiple sessions. If the HTTP file grows, split it
+by function into `response-parser.ts` and `request-errors.ts`; do not create multiple
+HTTP-client implementations.
 
-## 3. Domain Ownership of Shared Logic
+The usual layout is imports → local types → constants → public API → private helpers.
+A component keeps props/state/effects/handlers/render sections easy to find. Helpers
+may follow the public API when the declaration mechanism permits; avoid an order that
+causes initialization errors.
 
-Before authoring new logic, search existing implementations with `rg` / grep.
+## 3. Ownership of shared logic
 
-| Domain Logic | Target Module Ownership |
+Before writing, use `rg` to find similar implementations, behavior, and callers.
+
+| Logic | Intended owner |
 | --- | --- |
-| Schemas, DTOs, protocol enums | `packages/contracts/src/<domain>/` |
-| Skeleton math, weights, IK, landmarks | `packages/core/src/rig/` |
-| Keyframe interpolation, easing, clip sampling | `packages/core/src/animation/` |
-| View switching & topology compatibility | `packages/core/src/views/` |
-| Warp grids, morph targets, pose composition | `packages/core/src/deformation/` |
-| Triangulation, contour extraction, edge loops | `packages/core/src/geometry/` |
-| Mesh, material, shadow pass, GPU resources | `packages/runtime/src/<domain>/` |
-| Command bus, revisions, transactions, undo/redo | `packages/application/src/` |
-| HTTP, session, client transport | `apps/editor/src/services/` |
-| Feature-specific UI components | `apps/editor/src/features/<feature>/` |
-| Pure UI design system & shared widgets | `apps/editor/src/ui/` |
-| Icon catalog (Lucide + custom inline SVG) | `apps/editor/src/ui/icons/` |
-| MCP tool handlers & schema adapters | `apps/mcp/src/tools/` |
-| Native I/O, subprocesses, service adapters | `apps/service/src/adapters/` |
+| Schema/DTO/protocol enum | `packages/contracts/src/<domain>/` |
+| Bone math, weights, IK | `packages/core/src/rig/` |
+| Keyframes, easing, clip sampling | `packages/core/src/animation/` |
+| View selection and topology compatibility | `packages/core/src/views/` |
+| Warp/morph and pose composition | `packages/core/src/deformation/` |
+| Mesh/material/shadow/GPU resources | `packages/runtime/src/<domain>/` |
+| Commands, revisions, transactions, undo | `packages/application/src/` |
+| HTTP/session and API transport | `apps/editor/src/services/` |
+| UI specific to one feature | `apps/editor/src/features/<feature>/` |
+| Pure UI shared by several features | `apps/editor/src/ui/` |
+| MCP schema mapping/tool handler | `apps/mcp/src/tools/` |
+| File, process, and service adapters | `apps/service/src/adapters/` |
 
-Detailed module boundaries are codified in [MODULE_MAP.md](MODULE_MAP.md).
+Dependency relationships are defined in the [module map](MODULE_MAP.md). These are
+proposed paths; do not create empty folders or move files when the task is only
+planning.
 
-## 4. Prohibition of Duplicate Business Logic
+## 4. Do not duplicate business logic
 
-- A single domain rule or algorithm must have exactly one authoritative implementation.
-- Browser preview and export pipeline must share identical pose evaluation, easing, and deformation logic.
-- Do not duplicate TypeScript contracts into Rust by hand. Native bridges must be auto-generated or contract-tested.
-- Extract common logic only when the semantic meaning is identical. Do not force disparate behaviors into one bloated
-  helper overloaded with boolean flags.
-- Desktop and web adapters may vary in transport, but must never maintain duplicate copies of rigging or timeline reducers.
+- A business rule or algorithm has one implementation; callers use its public API
+  or transport.
+- Browser preview and export use the same pose evaluator, easing, and deformation
+  order.
+- Do not manually copy a TypeScript schema into Rust. When native code needs a
+  schema, generate it from the same source and test compatibility.
+- Extract parts that genuinely have the same meaning. Do not force two different
+  behaviors into a helper with many Boolean flags merely because several lines look
+  similar.
+- A helper lives in the narrowest scope with real callers. Promote it to a package
+  only when there is a clear shared need.
+- Adapters may differ by OS or transport, but they do not contain copies of rig or
+  timeline logic.
+- A clone detector is only supporting evidence; review must also find semantic
+  duplication. Do not claim "0 duplicate" based on one scan alone.
 
-## 5. Architectural Boundaries & Invariants
+## 5. Boundaries and invariants
 
-- **`core`** must never import React, DOM, Three.js, Node I/O, MCP SDK, or Tauri.
-- **`runtime`** must never call UI or MCP. UI and MCP must never bypass the Command Bus to mutate state.
-- All scene and asset modifications must pass through the **Application Command Bus**. State mutations are confirmed
-  only upon successful commit.
-- Contracts and Zod schemas do not replace invariant checks for revision sequencing, ID referential integrity,
-  acyclic skeletons, or normalized bone weights.
-- Coordinate spaces (local, rest-space, world, UV), axes directions, and transformation orders must remain explicit.
-- Textures, geometries, web workers, and event listeners must have deterministic lifecycle teardown (`dispose()`).
-- Never rebuild Three.js geometry or re-render entire component trees every frame if underlying data is unchanged.
+- Core does not import React, DOM, Three.js, Node I/O, MCP, or Tauri.
+- Runtime does not call UI/MCP. UI/MCP do not modify a project through a separate
+  path.
+- Modify scenes through the application command bus; confirm only after persistence
+  succeeds.
+- Schemas do not replace checks for revisions, ID references, bone cycles,
+  weights/topology, and job states.
+- Units, axis directions, local/world/UV spaces, and deformation order must be
+  explicit.
+- Textures, geometry, workers, listeners, and sessions have explicit lifecycle and
+  disposal behavior.
+- Do not rebuild geometry or the entire React tree every frame when data has not
+  changed.
+- Export has a revision snapshot, progress, cancellation, and readable errors.
 
-## 6. Automated Formatting & Quality Verification Gates
+## 6. Formatting and automated gates
 
-Formatting configurations: `.editorconfig`, `.prettierrc.json`, `rustfmt.toml`.
-Lines exceeding 120 columns trigger warnings and fail strict checks.
+Prepared configuration: `.editorconfig`, `.prettierrc.json`, `rustfmt.toml`.
+Prettier print width 100 is a formatting target, not a hard limit. Source lines over
+120 characters must be corrected; a special literal that cannot be reasonably
+wrapped needs a narrow reviewed exemption, not a whole-file exclusion.
 
-Current local verification commands (require no external dependencies):
+Current tools, requiring no dependencies:
 
 ```sh
 node scripts/quality/check-source-limits.mjs
 node --test scripts/quality/source-limits.test.mjs
+node scripts/quality/check-doc-sync.mjs
+node --test scripts/quality/doc-sync.test.mjs
 ```
 
-- Any file exceeding 800 physical lines fails the gate.
-- Long source lines (>120 columns) are reported as readability violations.
+- More than 800 lines per file makes the check fail.
+- A source line longer than 120 characters is reported and makes the check fail.
+- Doc-sync checks that all file pairs exist and that revisions, review status, and
+  current hashes match.
+- These checks do not validate syntax, semantic duplication, import boundaries, or
+  every style rule.
 
-Full CI gates in Milestone 0 include:
-1. Prettier formatting for TS/JS/JSON/CSS, rustfmt for Rust.
-2. ESLint with strict TypeScript checks.
-3. Dependency boundary analysis (dependency-cruiser) to prevent circular imports.
-4. Clone detection (jscpd) paired with semantic review.
-5. Automated test suite for invariants and deformation contracts.
+When implementing Milestone 0, add version-locked dependencies and these gates:
 
-## 7. AI Agent Operational Workflow
+1. Prettier check for TS/TSX/JS/JSON/CSS, rustfmt for Rust, and a Python formatter
+   when needed.
+2. ESLint, TypeScript strict mode, control-flow checks, and unused-code checks.
+3. Import graph/module-boundary and dependency-cycle checks.
+4. Clone detection for copied code blocks, accompanied by semantic review.
+5. Tests appropriate to the change; integration coverage for UI/MCP using the same
+   commands and preview/export using the same pose.
+6. CI runs gates before accepting a change; do not disable a rule merely to make CI
+   green.
 
-1. Read `AGENTS.md`, [PLAN.md](PLAN.md), and [MODULE_MAP.md](MODULE_MAP.md); establish task boundary.
-2. Locate existing code owners and callers prior to creating files (`REUSE → EXTEND → REFACTOR → CREATE NEW`).
-3. Define strict public API types; decouple responsibilities before exceeding 400 lines.
-4. Update callers of refactored logic; never leave parallel duplicate implementations.
-5. Format and run verification scripts (`scripts/quality/check-source-limits.mjs`).
-6. Report concise summaries: plan, progress, problems, and verification results.
+Formatters, linters, clone detectors, and complete CI integration have not been
+installed in this planning turn. Do not report that these tools were run. The legacy
+draft still fails readability checks; a planning task reports that result instead of
+silently turning into an application-wide refactor.
+
+## 7. AI workflow
+
+1. Read `AGENTS.md`, the plan, and the module map; identify the assigned scope.
+2. Find the logic owner and callers before creating a file.
+3. Choose the public API and dependency direction; split responsibilities before a
+   file grows too large.
+4. Update callers of shared logic without leaving two parallel implementations.
+5. Format, run relevant checks, and review the diff as the person who will maintain
+   the code.
+6. Report changes, checks run, remaining failures, and observed limitations.
+
+Rules and skills do not replace gates. If a client has not discovered a new skill,
+read the file linked from `AGENTS.md` directly rather than ignoring the guidance.

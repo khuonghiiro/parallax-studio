@@ -12,6 +12,8 @@
     "test": "vitest run",
     "test:mcp": "tsx tests/mcp.integration.ts",
     "test:engine": "cargo test --manifest-path engine/Cargo.toml",
+    "test:quality": "node --test scripts/quality/*.test.mjs",
+    "check:docs": "node scripts/quality/check-doc-sync.mjs",
     "check": "tsc -b",
     "build:engine": "cargo build --release --manifest-path engine/Cargo.toml"
   },

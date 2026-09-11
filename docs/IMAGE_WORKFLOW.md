@@ -1,219 +1,220 @@
-# Parallax Studio — AI Image Generation & Asset Ingestion Workflow
+# Create Images with the AI Client and Import Assets through MCP
 
-This document details the pipeline connecting AI client generation tools (Codex / Antigravity)
-with Parallax Studio via the Model Context Protocol (MCP), covering character decomposition,
-multi-view generation, and automated 2D mesh synthesis.
+Status: the requirement is included in the plan; the connector has not yet been
+implemented in the app.
 
-## 1. Architectural Responsibility
+## 1. Responsibilities
 
-- The AI client (Codex or Antigravity) generates and refines images using its native capabilities.
-- Parallax Studio provides MCP tools to supply briefs, inspect references, ingest PNG files,
-  manage layers/views, construct meshes, and bind rigs.
-- The desktop app does not bundle local image generation models (Stable Diffusion / ComfyUI)
-  or manage external API keys in its default workflow.
-- The AI agent acts as orchestrator. The MCP server does not invoke client-internal tools in reverse.
+Codex/Antigravity uses the image-generation and image-editing tools available in
+the working session. Parallax provides MCP tools to prepare a brief, read
+references, receive results, manage layers and views, build meshes, and rig
+assets. The default flow does not install a local image-generation model or
+require an additional app-specific image API key.
 
-## 2. Default Production Lifecycle
+The agent is the orchestrator. The MCP server cannot implicitly call an
+internal client tool in the reverse direction. Each client needs an available
+image-generation tool and artifact-transfer mechanism; do not hard-code the
+name of one specific tool into the shared protocol.
 
-```mermaid
-sequenceDiagram
-  participant User
-  participant Agent as AI Agent (Codex/Antigravity)
-  participant ClientTool as Client Image Tool
-  participant App as Parallax Studio (via MCP)
+The current Codex session has an image-generation tool in its tool catalog.
+Antigravity documentation also describes an integrated image-generation tool;
+actual availability still depends on the client and working session.
+[Antigravity Models][anti-models].
 
-  User->>Agent: "Create anime warrior character & 4K 60FPS short"
-  Agent->>App: asset.prepare_image_brief(template: "humanoid-front-tpose")
-  App-->>Agent: Brief (proportions, T-pose prompt hints, dimensions)
-  Agent->>ClientTool: generate_image(prompt, aspect_ratio)
-  ClientTool-->>Agent: Raw image artifact
-  Agent->>App: asset.import_image(source: filePath)
-  App-->>Agent: assetId, alpha validity, dimensions
-  Agent->>App: asset.attach_layer(parts...)
-  Agent->>App: mesh.generate(density: "high")
-  App-->>Agent: Wireframe preview overlay
-  Agent->>App: rig.apply_rig_template("humanoid-v1")
-  App-->>Agent: Skeleton + Auto-weights
-  Agent->>App: rig.test_pose({ bone: "left_arm", angle: 45 })
-  App-->>Agent: Deformed preview frame
-  Agent->>User: "Character rigged and verified!"
-```
+## 2. Default workflow
 
-## 3. Image Brief Specifications
+1. The user asks in Codex/Antigravity, for example, to create a character and a
+   4K/60 FPS film.
+2. The agent reads the project, style, and references and obtains a brief from a
+   Parallax MCP tool.
+3. The agent calls the client's image-generation tool and then inspects the
+   actual result.
+4. The agent calls the Parallax image-import tool, receives an asset ID, and
+   receives a validation report.
+5. The agent adds views, layers, and materials, creates the mesh and rig,
+   renders a test pose, and corrects it when necessary.
+6. When the asset meets requirements, the agent places it in a shot and exports
+   the film through MCP tools.
 
-Briefs provide structured metadata to maintain cross-image consistency:
-- Target `assetId`, `generationRequestId`, and project `revision`.
-- Character description, visual style, color palette, and reference hashes.
-- Camera angle, neutral rest pose (T-pose or A-pose), and anatomical proportions.
-- True RGBA alpha channel requirements and canvas safe padding.
-- Required layer decomposition list and semantic bone labels.
-- **Rig-Ready Template**: Embeds standardized proportions and prompt hints.
-  Refer to [AUTO_RIG.md](AUTO_RIG.md) section 2 for schema details.
+The image-generation button in the UI may prepare a request for the agent to
+read. If no supported agent-launch connection exists, the UI must state that it
+is waiting for the agent; it must not display a generating state.
 
-Briefs mandate flat directional lighting to allow dynamic scene re-lighting without conflicting baked-in shadows.
+## 3. Brief data
 
-## 4. Ingestion Protocol & File Transfer
+- Generation request ID, target asset ID, and project revision.
+- Asset type, description, style, color palette, and readable references.
+- Viewing angle, neutral pose, and body proportions to preserve between images.
+- Image format, desired alpha, desired dimensions, and safe-padding region.
+- Required layers or parts, plus bone names and semantics when a rig already
+  exists.
+- A distinction between artwork color/alpha and a scene normal map or shadow.
+- A **Rig-Ready Template**, when present: skeleton type, standard pose
+  (T-pose/A-pose), body proportions, and a `promptHint` that is automatically
+  added to the AI prompt. When an image is generated from the template,
+  auto-rig runs immediately after import. See [AUTO_RIG.md](AUTO_RIG.md)
+  section 2.4 for the schema and default template set.
 
-| MCP Tool | Functionality |
+The brief requests flat lighting when later relighting is required and limits
+pre-painted background shadows. Use an approved reference image as the basis
+for later generations and edits. Repeating the same prompt does not by itself
+guarantee that the character retains the same characteristics.
+
+## 4. Tools and image transfer
+
+The names below are proposed APIs, not a catalog of tools that is already
+operational:
+
+| Tool | Result |
 | --- | --- |
-| `asset.prepare_image_brief` | Produces structured prompt hints and reference guidelines |
-| `asset.import_image` | Validates file header, alpha channel, dimensions, and computes source hash |
-| `asset.attach_view` | Associates artwork with a specific camera angle set |
-| `asset.attach_layer` | Assigns an artwork element to a named anatomical layer |
-| `asset.validate_artwork` | Asserts layer separation, true alpha, and joint overlap margins |
-| `asset.get_preview` | Returns visual inspection frame for agent verification |
+| `asset.prepare_image_brief` | Brief and reference for the agent to generate or edit an image |
+| `asset.import_image` | Asset ID, actual dimensions, alpha, and source hash |
+| `asset.attach_view` | Attach a result to an asset's viewing angle |
+| `asset.attach_layer` | Attach an image or mask to a named part |
+| `asset.validate_artwork` | Report missing layers/views and image problems |
+| `asset.get_preview` | Preview for visual inspection by the agent |
 
-- Local workflows: Paths passed directly between client workspace and app service.
-- Remote workflows: Chunked binary uploads with SHA-256 verification.
-- Ingestion is idempotent: matching `requestId` or `sourceHash` prevents duplicate asset entries.
+- On the same machine, import the file returned by the image tool from a path
+  that both the agent and service can read.
+- On different machines, or when the artifact exists only in the client,
+  transfer it through a chunked upload with a hash. Do not assume that a cloud
+  path exists on the user's computer.
+- Do not treat a thumbnail URL or an image displayed in chat as an imported
+  source.
+- Send small metadata through JSON. Send large images through files or uploads
+  rather than repeating base64 for the entire image set on every pose edit or
+  command call.
+- Import must be idempotent by request ID and source hash so that retries do not
+  duplicate assets.
 
-## 5. Artifact Validation Criteria
+## 5. Output validation
 
-- **True Alpha Verification**: Validates uncompressed RGBA pixel data. Faux checkerboard patterns drawn into pixels fail validation.
-- **Single-Layer Rejection**: Flattened images are flagged; character parts must be separated before skeletal binding.
-- **Resolution Scaling**: Source resolution is recorded transparently; upscaling small generations does not fabricate 4K texture details.
+- Read the actual dimensions, MIME type, and alpha; do not fully trust the file
+  name or the agent's description.
+- A checkerboard drawn into the image does not count as transparency.
+- A flattened image does not automatically become separate layers. The app or
+  agent must separate or generate each part and validate occluded regions,
+  pivots, and overlap before rigging.
+- Validate the angle set for consistent clothing, colors, proportions, viewing
+  direction, and part names.
+- An image for a character that fills the screen requires a different pixel
+  budget from a small prop.
+- If the tool produces only a small image, disclose the source dimensions; do
+  not call an upscale a detailed 4K original. A 4K video output does not
+  automatically increase texture detail.
+- Record the source/reference and image version so that the texture can be
+  replaced while retaining the rig.
 
-## 6. Anatomical Part Decomposition
+## 6. Part Decomposition for Animation
 
-2D skeletal puppetry requires distinct physical layers to enable rotational joints without tearing artwork.
+A 2D character must be divided into separate layers for rigging and animation.
+A flattened image, which has only one layer, cannot be rigged directly and must
+be decomposed first.
 
-### 6.1 Standard Humanoid Decomposition Hierarchy
+### 6.1 Standard parts for a human character
 
 ```text
-Level 1 — Primary Groups:
-  ├── head          Head (face, hair, ears)
-  ├── torso         Upper chest and abdomen
-  ├── pelvis        Hips and waist
-  ├── left-arm      Left arm (shoulder to wrist)
+Level 1 — Main groups:
+  ├── head          Head, including hair and ears
+  ├── torso         Upper body
+  ├── pelvis        Pelvis
+  ├── left-arm      Left arm, shoulder to wrist
   ├── right-arm     Right arm
-  ├── left-leg      Left leg (thigh to ankle)
+  ├── left-leg      Left leg, thigh to ankle
   └── right-leg     Right leg
 
-Level 2 — Articulated Sub-parts:
+Level 2 — Details, when required by the animation:
   head/
-    ├── face        Facial canvas
-    ├── eyes        Eyes (optionally split left/right for blinking)
-    ├── mouth       Mouth phonemes
-    ├── hair-front  Forehead bangs
-    └── hair-back   Rear hair (draw order behind torso)
+    ├── face        Face: skin and line work
+    ├── eyes        Eyes, optionally separated into left and right
+    ├── eyebrows    Eyebrows
+    ├── mouth       Mouth
+    ├── nose        Nose
+    ├── hair-front  Hair in front of the face
+    └── hair-back   Rear hair, drawn behind the head
   left-arm/
-    ├── upper-arm   Deltoid to elbow
-    ├── forearm     Elbow to wrist
-    └── hand        Palm and fingers
+    ├── upper-arm   Upper arm
+    ├── forearm     Forearm
+    └── hand        Hand
   left-leg/
-    ├── thigh       Hip to knee
-    ├── shin        Knee to ankle
-    └── foot        Foot and toes
+    ├── thigh       Thigh
+    ├── shin        Shin
+    └── foot        Foot
 ```
 
-### 6.2 Technical Layer Requirements
+This list is a recommendation. A character may need other parts such as a tail,
+wings, cape, or accessories. Part names must remain consistent across all views
+of the same asset.
 
-| Constraint | Specification | Rationale |
-| --- | --- | --- |
-| True Alpha | Clean RGBA masking | Prevents opaque bounding boxes |
-| Clean Edges | Zero background halo fringes | Eliminates color contamination during blending |
-| Joint Overlap | $\ge 10\%$ bone length overlap at joints | Prevents visible seam gaps during rotational bends |
-| Canvas Bounds | Consistent canvas size across all layers | Maintains 1-to-1 stacking alignment |
-| Pivot Placement | Positioned precisely at joint rotation centers | Prevents unnatural rotational offsets |
-
-### 6.3 Occlusion Infilling (Under-drawing)
-
-When a character's arm crosses the torso, the occluded torso region must be painted in.
-If omitted, rotating the arm away reveals empty transparent holes. The agent uses the client's
-in-painting tools or dedicated part prompts to complete occluded surfaces.
-
-### 6.4 Standard Draw Order
-
-```text
-0  hair-back          Rear hair
-1  right-arm-back     Rear arm (when occluded by torso)
-2  right-leg-back     Rear leg
-3  torso              Torso
-4  pelvis             Pelvis
-5  left-leg-front     Foreground leg
-6  left-arm-front     Foreground arm
-7  head               Head
-8  hair-front         Front hair
-9  accessories        Hats, glasses, handheld props
-```
-
-Each view set (front, quarter, side) defines its own draw order mapping.
-
-## 7. Multi-View Set Generation
-
-### 7.1 View Angle Standards
-
-```text
-         back
-          ↑
-  side-left ← front → side-right
-          ↓
-       (reserve)
-
-Minimum Production Set:
-  1. front           Direct front perspective
-  2. quarter-left    Left three-quarter angle (~30°–45°)
-  3. quarter-right   Right three-quarter angle (~30°–45°)
-
-Full Set (Extended):
-  4. side-left       Direct lateral profile (~90°)
-  5. side-right      Direct lateral profile (~90°)
-  6. back            Rear perspective (~180°)
-```
-
-### 7.2 Consistency Invariants
-
-- Front view acts as the authoritative anchor reference. All subsequent angles must conform to it.
-- **Costume Invariant**: Identical clothing patterns, buttons, seams, and accessories.
-- **Proportion Invariant**: Shoulder width, limb length, and head-to-body ratios match within $\pm 5\%$.
-- **Color Palette Invariant**: Skin, hair, and fabric tones remain identical across lighting passes.
-- **Pivot Alignment Invariant**: Joint pivots correspond to identical relative anatomical coordinates.
-
-## 8. AI-Driven Mesh Synthesis via MCP
-
-Parallel to how AI agents control Blender via 3D MCP tools, agents in Parallax Studio control
-2D mesh generation autonomously.
+### 6.2 Part-decomposition workflow
 
 ```mermaid
 flowchart TD
-  P["User Prompt"] --> G["AI Generates Artwork via Client Tool"]
-  G --> I["MCP: asset.import_image"]
-  I --> L["MCP: asset.attach_layer"]
-  L --> C["MCP: mesh.detect_contour"]
-  C --> M["MCP: mesh.generate(density: high)"]
-  M --> V["MCP: mesh.preview"]
-  V --> A{"Agent Vision Analysis:<br/>Mesh Topology Clean?"}
-  A -->|Refine Needed| R["MCP: mesh.add_edge_loops / refine"]
-  R --> V
-  A -->|Approved| S["MCP: rig.apply_rig_template"]
-  S --> T["MCP: rig.test_pose"]
-  T --> D{"Deformation Smooth?"}
-  D -->|Pinching Detected| R
-  D -->|Approved| OK["Asset Ready for Scene Staging"]
+  A["Complete character image"] --> B{"Are layers already available?"}
+  B -->|PSD / already separated| C["Import each layer"]
+  B -->|Flattened| D["Separate manually or with AI"]
+  D --> D1["Generate each part separately"]
+  D --> D2["Or use masks / selections to extract parts from the original image"]
+  D1 --> E["Validate every layer"]
+  D2 --> E
+  C --> E
+  E --> F["Set the pivot for each part"]
+  F --> G["Define draw order"]
+  G --> H["Validate overlap and occluded regions"]
+  H --> I["Attach to the asset, ready for rigging"]
 ```
 
-### 8.1 Automated Triangulation Pipeline
+### 6.3 Technical requirements for each part layer
 
-1. **Contour Extraction**: Marching Squares extracts vector boundary polygons from alpha channels.
-2. **Contour Simplification**: Douglas-Peucker reduces boundary vertices while preserving silhouette fidelity.
-3. **Interior Vertex Scattering**: Poisson disk sampling distributes interior vertices to maintain uniform triangle aspect ratios.
-4. **Adaptive Density**:
-   - *High Density*: Joint articulation regions (elbows, knees, shoulders, hips, neck, eyes, mouth).
-   - *Medium Density*: Flexible limb segments (forearms, shins, torso).
-   - *Low Density*: Rigid or static areas (helmet, armor plates, props).
-5. **Earcut Triangulation**: Generates non-overlapping triangle index buffers.
-6. **UV Mapping**: Normalizes vertex positions against texture bounds $[0, 1]^2$.
+| Requirement | Description |
+| --- | --- |
+| Transparent alpha | The background must be truly transparent (RGBA), not a solid background color |
+| Clean edges | No halo or fringe from the old background around the part |
+| Overlap | A part must extend a few pixels into a connection area, such as shoulder into torso or thigh into pelvis, to avoid a gap when the bone rotates |
+| Canvas dimensions | Use the same canvas size as the original image so that parts align when stacked |
+| File / layer name | Use the conventional part name, such as head, torso, or left-arm |
+| Pivot | Place it at the natural rotation joint: shoulder, elbow, hip, knee, or neck |
 
-### 8.2 Edge Loops for 2D Joints
+### 6.4 Two decomposition methods
 
-Edge loops are concentric vertex rings surrounding articulation pivots.
-Similar to 3D sub-division modeling, edge loops prevent mesh pinching and volume collapse during acute limb bends.
-The agent specifies joint coordinates; the app generates concentric rings around those centers.
+**Method 1 — Generate each part separately:**
+The agent asks AI to create one part at a time while preserving the same style,
+proportions, and reference. This method is suitable when detailed control is
+required. Its challenge is consistency across separate generations.
 
-## 9. Documentation References
+**Method 2 — Extract parts from a full-body image:**
+The agent asks AI to create a strong full-body image, then separates it with
+masks or selections. AI may generate a mask for each region. This method is
+suitable when the full-body image already meets requirements. Its challenge is
+that occluded areas, such as the torso behind an arm, must be painted in.
 
-- [PLAN.md](PLAN.md) sections 2, 5 — Product scope and AI handoff architecture
-- [AUTO_RIG.md](AUTO_RIG.md) — Mixamo-style auto-rigging and Rig-Ready Templates
-- [MCP_TOOLS.md](MCP_TOOLS.md) — Complete tool catalog and request schemas
-- [PROJECT_FORMAT.md](PROJECT_FORMAT.md) — Disk serialization format
-- [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) — Deformation transformation order
+**General rules:**
+- A flattened image is not a layer set. It must be decomposed explicitly.
+- Import every part as a separate layer through `asset.attach_layer`.
+- Validate the composite: stacking all layers must reproduce the original
+  image.
+- Occluded regions require additional artwork behind the foreground part. For
+  example, complete the torso behind an arm and the legs behind a garment. If
+  these regions are not filled in, rotating a bone exposes empty space. The
+  agent generates the missing artwork or uses the client's image-editing tool
+  to complete it.
+
+### 6.5 Draw order and overlap
+
+```text
+Typical draw order, back to front:
+
+  0  hair-back            Rear hair
+  1  right-arm (rear)     Right arm behind the torso
+  2  right-leg (rear)     Right leg behind
+  3  torso                Torso
+  4  pelvis               Pelvis
+  5  left-leg             Left leg in front
+  6  left-arm             Left arm in front
+  7  head                 Head
+  8  hair-front           Hair in front of the face
+  9  accessories          Accessories: hat, glasses, and so on
+```
+
+Draw order changes by view. At a quarter angle, the arm nearer the camera moves
+forward and the farther arm moves behind. Each view defines its own draw order.

@@ -1,97 +1,99 @@
-# Parallax Studio — Module Ownership & Architectural Boundaries
+# Module map — proposed architecture
 
-This document defines the canonical package ownership, directory layout, and dependency rules.
-Modules are created only when backing concrete functional responsibilities; empty scaffolding is prohibited.
+This is the target of the standardization milestone, not the complete current
+structure. Create a module only when implementing a real responsibility; do not
+scaffold large numbers of empty files.
 
-## Directory Structure
+## Directory structure
 
 ```text
 apps/
   editor/src/
-    app/                    Application startup, root layout, feature orchestration
+    app/                    Startup, layout, feature wiring
     features/
-      assets/               Asset browser, image ingestion, layer decomposition editor
-      rig/                  Skeleton tree, joint pivots, weight painting brush, test posing
-      views/                Multi-angle view switching and facial expressions
-      stage/                Interactive Three.js viewport and gizmo manipulation
-      timeline/             Track controls, clip arranging, playhead navigation, dopesheet
-      director/             AI script breakdown, shot management, staging progress
-      export/               Export configuration presets and render job progress
+      assets/               Library, import, layer editor
+      rig/                  Bone tree, pivot, weight brush, test pose
+      views/                View sets and expressions
+      stage/                Viewport and interaction
+      timeline/             Tracks, clips, playhead UI
+      director/             Script, shots, AI progress
+      export/               Render settings and progress
     services/
-      transport/            HTTP client, network error parsing, request timeouts
-      session/              Client session management with explicit instance ownership
-      project/              Client adapter dispatching to Application Command Bus
-    ui/                     Design system widgets, fields, modals, icon catalog (Lucide + SVG)
+      transport/            HTTP, error parsing, timeouts
+      session/              Session client with explicit ownership
+      project/              Adapter that calls the application service
+    ui/                     Buttons, dialogs, fields, icon catalog (Lucide + custom SVG)
   service/src/
-    http/                   Thin HTTP routing layer
+    http/                   Thin routes
     adapters/
-      persistence/          Atomic project serialization, file storage, asset media store
-      encoding/             FFmpeg subprocess streaming, NVENC probe, progress reporting
-      renderer/             Headless renderer registration and job transport
-    bootstrap.ts            Dependency injection and service lifecycle orchestration
+      persistence/          Atomic writes, project repository, media store
+      encoding/             FFmpeg process and progress
+      renderer/             Renderer registration and job transport
+    bootstrap.ts            Wire dependencies and start the service
   mcp/src/
-    tools/                  Domain adapters (asset, rig, animation, scene, export)
-    resources/              Project summaries, frame thumbnails, and job status resources
-    server.ts               MCP SDK setup and stdio transport adapter
-  desktop/src-tauri/src/    Tauri native desktop shell, window lifecycle, sidecar supervisor
+    tools/                  Adapters by asset, rig, animation, scene, export
+    resources/              Summaries, previews, and job status
+    server.ts               Wire SDK and transport
+  desktop/src-tauri/src/    Tauri shell and sidecar lifecycle
 packages/
   contracts/src/
     asset/                  Layer, material, view schemas
     rig/                    Bone, binding, pose, landmark, rig-template schemas
-    animation/              Track, clip, keyframe, curve schemas
+    animation/              Track, clip, keyframe schemas
     scene/                  Instance, camera, light, shot schemas
-    commands/               Command payloads and result contracts
-    jobs/                   Render job states and progress DTOs
-    images/                 ImageGenerationBrief and artifact handoff contracts
-    export/                 ExportProfile contracts: resolutions, framerates, codecs
+    commands/               Command payloads and results
+    jobs/                   Render job states
+    images/                 ImageGenerationBrief and artifact handoff
+    export/                 ExportProfile: resolution, FPS, codec, quality
     session/                SessionInfo and transport DTOs
   core/src/
-    geometry/               Contour extraction, Earcut triangulation, UV mapping, edge loops
-    rig/                    Hierarchy, bind pose, distance weights, IK, landmarks, auto-skeleton
-    deformation/            Warp grids, morph targets, canonical pose composition
-    views/                  View selection, angle switching, topology compatibility check
-    animation/              Easing curves, keyframe interpolation, clip sampling
-    scene/                  Transform math, depth card ordering, camera projection sampling
-    validation/             Cross-domain business invariant validation
+    geometry/               Contour extraction, triangulation (Earcut), UV,
+                            vertex density, edge loops, mesh preview, topology
+    rig/                    Hierarchy, bind pose, weights, IK, landmarks, auto-skeleton
+    deformation/            Warp grid, morph, pose composition
+    views/                  View selection and view transitions
+    animation/              Easing, keyframes, clips, sampling
+    scene/                  Transform, layer/depth, camera sampling
+    validation/             Cross-domain business invariants
   application/src/
-    commands/               Domain command handlers and command bus registry
-    history/                Undo/redo stacks and transactional rollbacks
-    projects/               Revision tracking, snapshot generation, persistence orchestration
-    jobs/                   Render job queue, lease management, cancellation
-    images/                 Brief creation, ingestion verification, layer orchestration
-    ports/                  Secondary ports (storage, renderer, encoder, AI provider)
+    commands/               Handlers by domain, command registry
+    history/                Undo/redo and transactions
+    projects/               Revision, snapshots, orchestration
+    jobs/                   Queue, lease, cancellation, retry
+    images/                 Brief, source ingestion, view/layer orchestration
+    ports/                  Storage, renderer, encoder, provider interfaces
   runtime/src/
-    meshes/                 Three.js SkinnedMesh creation and skeleton binding
-    materials/              Shader materials, transparency, normal maps, roughness
-    shadows/                Silhouette shadow maps and planar shadow receivers
-    cameras/                Orthographic and perspective camera adapters
-    resources/              Texture and buffer disposal lifecycle
-    playback/               Interactive viewport render loop using core sampling
-    export/                 Offline frame rendering pipeline
-  image-handoff/src/        Reference file verification and AI artifact ingestion
-scripts/quality/            Independent, dependency-free quality and constraint verification gates
-docs/                       Canonical English master plan, rules, and technical specifications
-docs_vi/                    Vietnamese documentation reference for human inspection
+    meshes/                 Render mesh and skeleton adapter
+    materials/              Image, alpha, normal map
+    shadows/                Shadow pass and receivers
+    cameras/                Camera adapter
+    resources/              Texture/geometry cache and disposal
+    playback/               Frame loop using core sampling
+    export/                 Frame rendering using the same runtime
+  image-handoff/src/        References, files/uploads, and validation of AI-created artifacts
+scripts/quality/            Small, independent, readable gates
+docs_vi/                    Canonical Vietnamese specification reviewed by the user
+docs/                       English translation of docs_vi for AI agents
 ```
 
-## Module Ownership & Dependency Boundaries
+## Ownership and dependencies
 
-| Module | Permitted Dependencies | Prohibited Dependencies |
+| Module | May depend on | Must not depend on |
 | --- | --- | --- |
-| `contracts` | External schema libraries (Zod) | `core`, `runtime`, `apps/*` |
-| `core` | `contracts`, pure math algorithms | React, Three.js, DOM, Node I/O, MCP, Tauri |
-| `application` | `core`, `contracts`, application ports | UI, Three.js, concrete file system / DB |
-| `runtime` | `core`, `contracts`, Three.js | UI, MCP, direct project disk writes |
-| `apps/editor` features | `apps/editor/services`, `core` (pure preview), `contracts`, `ui` | Node.js `fs`, direct MCP imports |
-| `apps/service` adapters | `application` ports, concrete I/O libraries | Re-implementing core business math |
-| `apps/mcp` tools | `contracts`, application service client | Direct disk mutations, custom rig logic |
-| `desktop` shell | Tauri native APIs, service lifecycle | Duplicated animation/rig reducers |
+| contracts | Schema library | Core, runtime, UI, service |
+| core | contracts, pure algorithms | React, Three.js, DOM, Node I/O, MCP, Tauri |
+| application | core, contracts, ports | UI, Three.js, concrete storage |
+| runtime | core, contracts, Three.js | UI, MCP, direct project writes |
+| editor feature | services, pure core for preview, contracts, ui | HTTP in components, MCP, Node fs |
+| service adapter | application ports, I/O libraries | Reimplemented business logic |
+| MCP tool | contracts, application client | Direct project modification or separate rig algorithms |
+| desktop shell | Lifecycle and native adapters | Copies of rig/timeline/scene reducers |
 
-The Application Service enforces state authority. The Editor UI uses `core` for responsive
-in-memory preview but commits all state modifications through the Application Service.
-MCP tools call the identical Application Service endpoints.
+The local application service is authoritative for command processing. The UI uses
+the same core for previews while dragging but commits through the service. MCP also
+calls the service and does not create separate project state.
 
-### Dependency Graph
+### Dependency graph
 
 ```mermaid
 graph TD
@@ -120,78 +122,85 @@ graph TD
   imagehandoff --> application
 ```
 
-Arrows denote allowed import directions (`A → B` means A may import B). Circular dependencies are prohibited.
+An arrow `A → B` means A may import from B. There are no reverse arrows.
 
-## Concrete Shared Logic Examples
+## Shared-logic examples
 
-### Pose Sampling at Target Time
+### Sampling a pose at a frame
 
-- `core/animation/sample-keyframes.ts`: Evaluates keyframe easing curves.
-- `core/animation/sample-clip.ts`: Clamps time within clip bounds and loops.
-- `core/deformation/compose-pose.ts`: Chains transformations in canonical order.
-- `runtime/playback/apply-pose.ts`: Binds matrix calculations to Three.js bone buffers.
-- Neither the timeline UI nor the offline exporter implements bespoke interpolation logic.
+- `core/animation/sample-keyframes.ts`: keyframes and easing.
+- `core/animation/sample-clip.ts`: the clip's time range.
+- `core/deformation/compose-pose.ts`: combine the pose in the defined order.
+- `runtime/playback/apply-pose.ts`: map the pose to GPU buffers/skeletons.
+- The timeline UI and exporter do not have separate interpolation implementations.
 
-### Rigging & Mesh Generation
+### Rig and mesh
 
-- `core/geometry/triangulate-contour.ts`: Wraps Earcut with strict topology and boundary checks.
-- `core/rig/compute-weights.ts`: Proximity-based bone weight calculations with layer masking.
-- `core/rig/normalize-weights.ts`: Enforces 4 influences per vertex summing strictly to 1.0.
-- `core/rig/validate-hierarchy.ts`: Enforces acyclic graphs via topological sorting.
-- `apps/editor/src/features/rig/`: Visualizes bones and maps user gestures into command payloads.
+- `core/geometry/triangulate-contour.ts`: wrap Earcut and validate input/output.
+- `core/rig/compute-weights.ts`: weight-generation algorithm.
+- `core/rig/normalize-weights.ts`: normalize and validate the sum.
+- `core/rig/validate-hierarchy.ts`: bone parents and cycles.
+- `features/rig/`: display the rig and convert interactions into commands.
 
-### Client Session Management
+### Session
 
-- `contracts/session/session-info.ts`: Single authoritative DTO definition.
-- `apps/editor/src/services/transport/http-client.ts`: Handles requests, timeouts, and error parsing.
-- `apps/editor/src/services/session/session-client.ts`: Encapsulates tokens per client instance.
-- Components never parse raw network responses or access global token variables directly.
+- `contracts/session/session-info.ts`: one DTO definition.
+- `services/transport/http-client.ts`: request/response, timeout, errors.
+- `services/session/session-client.ts`: a token owned by one client instance.
+- Components do not parse responses, hold a global token, or create another HTTP
+  helper.
 
-### Scaling Large Modules
+### When a module becomes large
 
-When `core/rig/` expands, it subdivides into `hierarchy/`, `binding/`, `weights/`, `landmarks/`, `ik/`.
-Each sub-folder maintains a minimal public API; dumping logic into a monolithic `rig-utils.ts` is prohibited.
+For example, when `core/rig/` grows, divide it into `hierarchy/`, `binding/`,
+`weights/`, and `ik/`. Each branch has a small public API; do not move everything
+into a new `rig-utils.ts`. Do not export every internal symbol through a barrel that
+causes import cycles or makes tree-shaking difficult.
 
-### AI Image Generation & Handoff
+### Images created by an AI client
 
-- `contracts/images/` defines image briefs and metadata independently of AI client tooling.
-- `application/images/` orchestrates generation briefs, artifact ingestion, and revision tagging.
-- `image-handoff/` verifies PNG alpha integrity and file transport without bundling local AI models.
-- MCP tools execute ingestion; image generation runs externally in the AI client.
-  Refer to [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md).
+- `contracts/images/` owns briefs and image metadata without depending on a
+  client-specific tool name.
+- `application/images/` owns image-generation requests, result ingestion, and
+  idempotency.
+- `image-handoff/` handles file/metadata transfer through a port; it does not embed
+  an image-generation model.
+- MCP only passes commands; the image-generation tool runs in Codex/Antigravity.
+- Details are in [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md).
 
-### High-Framerate Video Export
+### 2K/4K export at 60/120 FPS
 
-- `contracts/export/` provides standard presets (2K/4K, 60/120 FPS, H.264/HEVC).
-- `core/animation/` samples poses at discrete timestamps independently of UI framerates.
-- `runtime/export/` renders sampled frames; `service/adapters/encoding/` streams to NVENC/FFmpeg.
-- Hardcoding custom resolution or framerate lists across UI or backend is prohibited.
-  Refer to [RENDER_PROFILES.md](RENDER_PROFILES.md).
+- `contracts/export/` is the single source for presets, FPS, and codec settings.
+- `core/animation/` samples poses by time, independently of preview/output FPS.
+- `runtime/export/` renders frames; `service/adapters/encoding/` handles
+  NVENC/FFmpeg.
+- Do not hard-code separate resolution/FPS lists in UI, MCP, and backend.
+- Details are in [RENDER_PROFILES.md](RENDER_PROFILES.md).
 
-## Draft Code Migration Strategy
+## Mapping from the draft code
 
-| Draft Location | Target Architecture Role |
+| Current | Direction after implementation is assigned |
 | --- | --- |
-| `src/App.tsx` | Decomposed into layout shell, dockable panels, keyboard shortcuts |
-| `src/api.ts` | Refactored into domain HTTP clients and session services |
-| `src/engine/Stage.ts` | Decomposed into runtime mesh, material, camera, and shadow passes |
-| `shared/model.ts` | Decomposed into domain contracts with core validation logic |
-| `shared/animation.ts` | Separated into pure core sampling, pose composition, and skinning math |
-| `shared/templates.ts` | Moved to rig-template and animation-template registries |
-| `engine/src/main.rs` | Stripped of duplicate web servers; retained for Tauri desktop shell |
-| `engine/src/validation.rs` | Redundant manual Rust contracts replaced with shared TypeScript contracts |
-| `engine/src/store.rs` | Evaluated for atomic persistence; command reducers unified in TypeScript |
+| `src/App.tsx` | Separate layout, panels, keyboard bindings, and orchestration |
+| `src/api.ts` | HTTP client, session, and domain APIs |
+| `src/engine/Stage.ts` | Separate mesh, material, camera, shadow, picking, and lifecycle concerns |
+| `shared/model.ts` | Domain contracts, with business validation moved to core |
+| `shared/animation.ts` | Separate sampling, pose composition, and rig weights |
+| `shared/templates.ts` | Registry and templates by asset type |
+| `engine/src/main.rs` | Do not combine HTTP/import/render/boot; evaluate reusable shell parts |
+| `engine/src/validation.rs` | Remove handwritten contracts duplicated from TypeScript during migration |
+| `engine/src/store.rs` | Evaluate atomic persistence; do not retain commands duplicated from the TypeScript service |
 
-Refactoring of draft files occurs during Milestone 0 upon user instruction.
+Do not move, edit, or delete these files in a turn that only requests planning.
 
-## Documentation References
+## Links
 
-- [PLAN.md](PLAN.md) — Master product roadmap and milestone scope
-- [CODING_RULES.md](CODING_RULES.md) — Coding standards and 800-line physical file limits
-- [COMMAND_BUS.md](COMMAND_BUS.md) — Command bus architecture and undo/redo mechanics
-- [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) — Canonical deformation transformation order
-- [MCP_TOOLS.md](MCP_TOOLS.md) — MCP tool catalog and request/response schemas
-- [PROJECT_FORMAT.md](PROJECT_FORMAT.md) — On-disk project structure and manifest schema
-- [UI_SPECIFICATION.md](UI_SPECIFICATION.md) — Dual-mode editor UI layout and icon system
-- [AUTO_RIG.md](AUTO_RIG.md) — Mixamo-style auto-rigging and mesh topology standards
-- [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) — AI image generation, layer decomposition, and auto-mesh
+- [PLAN.md](PLAN.md) — product plan
+- [CODING_RULES.md](CODING_RULES.md) — source-code rules
+- [COMMAND_BUS.md](COMMAND_BUS.md) — command bus used by the application module
+- [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) — pipeline used by core/runtime
+- [MCP_TOOLS.md](MCP_TOOLS.md) — MCP tool mapping to application commands
+- [PROJECT_FORMAT.md](PROJECT_FORMAT.md) — data schemas from contracts
+- [UI_SPECIFICATION.md](UI_SPECIFICATION.md) — UI design and icon system
+- [AUTO_RIG.md](AUTO_RIG.md) — auto-rig pipeline and landmark detection
+- [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) — AI image-creation and layer-separation workflow

@@ -1,113 +1,130 @@
-# Parallax Studio — Project Format & Data Schemas
+# Project format and data schemas
 
-This document defines the on-disk directory layout, schema definitions, and serialization rules
-for Parallax Studio project files. Contracts are codified in `packages/contracts/`.
+Status: proposed design for implementation in Milestones 0–1. There is not yet an official
+schema in the source; this document defines the direction and constraints to finalize during
+implementation.
 
-## 1. On-Disk Project Directory Structure
+## 1. On-disk project directory structure
 
 ```text
 <project-root>/
-  manifest.json            Project metadata, schema version, asset/scene registries, global revision
+  manifest.json            Metadata, schema version, asset registry
   assets/
     <asset-id>/
-      source/              Raw source images (PNG, PSD layers), normal maps, alpha masks
-      views/               Per-angle sliced artwork and view bindings
-      landmarks.json       Calibrated joint landmarks (chin, wrist, knee...) for auto-rigging
-      rig.json             Bone hierarchy, skin weights, bone-layer bindings
-      mesh.json            Contour coordinates, triangulation indices, UVs, edge loop definitions
-      material.json        Color tints, normal map references, roughness parameters
-      meta.json            Asset display name, tags, origin (AI brief ID, reference hashes)
+      source/              Original images (PNG, PSD layers), normal maps, masks
+      views/               Images/layers for each viewing angle
+      landmarks.json       Joint-point coordinates (chin, wrist, knee...) for auto-rig
+      rig.json             Bone hierarchy, weights, bindings
+      mesh.json            Contours, triangulation, UVs, edge loops
+      material.json        Tint, normal-map reference, roughness
+      meta.json            Name, tags, provenance (AI brief, reference hash)
   scenes/
     <scene-id>/
-      scene.json           Placed instances, cameras, directional lights, depth cards, shadow planes
-      timeline.json        Animation tracks, discrete clips, keyframe property curves
-  cache/                   Regenerable working cache (safe to delete)
-    thumbnails/            Downscaled preview textures for asset browser
-    atlas/                 Packed texture atlases for GPU batching
-    render/                Temporary intermediate frame buffers during active export jobs
-  history/                 Persisted undo/redo state stacks (snapshot or delta log)
+      scene.json           Instance list, camera, lights, depth, shots
+      timeline.json        Tracks, clips, keyframes
+  cache/                   Regenerable data
+    thumbnails/            Small previews for the asset browser
+    atlas/                 Packed texture atlases
+    render/                Intermediate frames for the running job
+  history/                 Undo history (depending on strategy; see COMMAND_BUS)
 ```
 
-### Invariants & File System Constraints
+### Principles
 
-- `manifest.json` is the single authoritative root entry point.
-- The `cache/` directory can be purged at any time without data loss; the engine reconstructs caches as needed.
-- Asset and scene directories use persistent UUID v4 identifiers, never display names.
-- Subdirectories and filenames use lowercase ASCII alphanumeric slugs with hyphens or underscores (`-_`).
-- Internal path references in JSON use forward slashes (`/`), relative to `<project-root>`.
+- `manifest.json` is the only entry point; opening a project starts by reading this file.
+- All of `cache/` can be deleted without losing source data. The app recreates it when needed.
+- Asset IDs and scene IDs use UUID v4, not file names or incrementing indices.
+- Child directory and file names use English slugs and contain no special characters other
+  than `-_`.
+- Paths in the manifest use `/` (forward slash) and are relative to the project root.
 
-## 2. Manifest Schema
+## 2. Manifest schema
 
-Authoritative schema defined in Zod (`packages/contracts/src/project/`):
+This is a draft. The official schema will be defined with Zod in
+`packages/contracts/src/project/`, with JSON Schema generated from it.
 
 ```jsonc
 {
-  "$schema": "https://parallax.studio/schemas/v1/manifest.json",
+  // Manifest schema version, used for migration
   "schemaVersion": 1,
-  "name": "Short Film Project",
+
+  // Metadata
+  "name": "Sample short film",
   "createdAt": "2026-09-11T04:00:00Z",
   "updatedAt": "2026-09-11T04:30:00Z",
+
+  // Global revision, incremented after every successful command commit
   "revision": 42,
+
+  // Asset registry
   "assets": {
-    "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d": {
-      "name": "Protagonist",
+    "<asset-id>": {
+      "name": "Main character",
       "type": "character",         // character | prop | background
-      "directory": "assets/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+      "directory": "assets/<asset-id>",
       "views": ["front", "quarter-left", "quarter-right"],
       "hasRig": true,
-      "sourceHash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "sha256:abcdef...",
       "createdRevision": 5,
       "updatedRevision": 38
     }
   },
+
+  // Scene registry
   "scenes": {
-    "5c8a14b3-7634-4b51-9dc5-d14207914f6b": {
-      "name": "Scene 1 — Forest Entrance",
-      "directory": "scenes/5c8a14b3-7634-4b51-9dc5-d14207914f6b",
+    "<scene-id>": {
+      "name": "Opening scene",
+      "directory": "scenes/<scene-id>",
       "createdRevision": 10,
       "updatedRevision": 42
     }
   },
+
+  // Default settings
   "defaults": {
     "timelineFps": 24,
     "previewFps": 60,
-    "exportProfile": "4k-uhd-60"
+    "exportProfile": "4k-uhd-60"   // References a preset name in RENDER_PROFILES
   }
 }
 ```
 
-### Versioning & Migration Policy
+### Schema-version rules
 
-- `schemaVersion` is a strictly monotonic integer starting at 1.
-- Older schema versions automatically trigger migrations, creating a backup copy (`.manifest.v<N>.bak.json`).
-- Newer schema versions unsupported by the running app fail gracefully with clear descriptive messages.
-- Migrations must be lossless; deprecated properties must explicitly map to new fields.
+- `schemaVersion` is an incrementing integer that starts at 1.
+- When opening a project with a `schemaVersion` older than the version supported by the app,
+  run an automatic migration, create a backup of the old manifest
+  (`.manifest.v<N>.bak.json`), and log the changes.
+- When opening a project with a newer `schemaVersion`, report a clear error and do not attempt
+  to parse it.
+- A migration must not lose data. A removed old field must have an explicit mapping to the new
+  structure in the migration function.
 
-## 3. Asset Data Schemas
+## 3. Asset data
 
-### Views & Layers
+### Layers and views
 
-Each view set represents a specific camera perspective:
-
-| Field | Type | Description |
-| --- | --- | --- |
-| `viewId` | string | Canonical angle key: `front`, `quarter-left`, `quarter-right`, `side-left`, `back` |
-| `layers` | Layer[] | Ordered list of artwork layers |
-| `pivot` | `{ x: number, y: number }` | Coordinate origin in pixel space |
-| `drawOrder` | number[] | Layer index rendering order from back to front |
-
-Layer definition:
+Each view (viewing angle) of an asset contains:
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `layerId` | string | Persistent UUID |
-| `name` | string | Descriptive anatomical label: `head`, `torso`, `left_upper_arm` |
-| `colorPath` | string | Relative file path to color PNG |
-| `alphaMaskPath` | string? | Optional path to decoupled grayscale alpha mask |
-| `normalMapPath` | string? | Optional path to normal map texture |
-| `bounds` | `{ x, y, width, height }` | Bounding rectangle within the source canvas |
+| `viewId` | string | Angle name: `front`, `quarter-left`, `side-left`, `back` |
+| `layers` | Layer[] | Ordered list of layers in draw order |
+| `pivot` | `{ x, y }` | Origin in texture coordinates, in pixels |
+| `drawOrder` | number[] | Layer indices in drawing order |
 
-### Skeleton & Skinning (`rig.json`)
+Each layer contains:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `layerId` | string | UUID |
+| `name` | string | Descriptive name: `head`, `torso`, `left-arm` |
+| `colorPath` | string | Color-image path relative to the asset directory |
+| `alphaMaskPath` | string? | Used when alpha is separate from the color image |
+| `normalMapPath` | string? | Optional normal map |
+| `bounds` | `{ x, y, width, height }` | Position and size within the asset canvas |
+
+### Rig
 
 ```jsonc
 {
@@ -115,30 +132,30 @@ Layer definition:
     {
       "boneId": "bone-001",
       "name": "spine",
-      "parentId": null,
-      "position": { "x": 0, "y": 0 },
-      "rotation": 0,
-      "length": 120
+      "parentId": null,             // null = root bone
+      "position": { "x": 0, "y": 0 },  // local offset from parent, in pixels
+      "rotation": 0,                // radians, local
+      "length": 50                  // pixels
     }
   ],
   "bindings": [
     {
       "layerId": "layer-001",
       "boneId": "bone-001",
-      "weights": [1.0, 0.8, 0.5, 0.0]
+      "weights": [/* per-vertex weights */]
     }
   ]
 }
 ```
 
 Invariants:
-- Acyclic graph; verified via topological sort during serialization and deserialization.
-- Maximum 4 bone influences per vertex; weights normalized to sum strictly to 1.0.
-- Rest pose stored independently per view set.
+- The hierarchy must be acyclic; validate it with a topological sort when loading.
+- Each vertex has at most four bone influences; weights are normalized to a total of 1.0.
+- The rest pose is the state before animation is applied and is stored separately for each view.
 
-### Landmarks (`landmarks.json`)
+### Landmarks
 
-Calibrated joint coordinates for Mixamo-style auto-rigging (refer to [AUTO_RIG.md](AUTO_RIG.md)):
+Used by the Mixamo-style Auto-Rig workflow; see [AUTO_RIG.md](AUTO_RIG.md):
 
 ```jsonc
 {
@@ -161,44 +178,44 @@ Calibrated joint coordinates for Mixamo-style auto-rigging (refer to [AUTO_RIG.m
 }
 ```
 
-### Mesh Topology (`mesh.json`)
+### Mesh
 
 ```jsonc
 {
-  "contours": [[{ "x": 10, "y": 20 }, { "x": 30, "y": 20 }]],
-  "vertices": [10, 20, 30, 20, 20, 40],
-  "indices": [0, 1, 2],
-  "uvs": [0.1, 0.2, 0.3, 0.2, 0.2, 0.4],
-  "edgeLoops": [[4, 5, 6, 7], [12, 13, 14, 15]],
-  "topology": "earcut-v1"
+  "contours": [/* array of contour points */],
+  "vertices": [/* coordinates after triangulation */],
+  "indices": [/* triangles */],
+  "uvs": [/* UVs corresponding to vertices */],
+  "edgeLoops": [/* arrays of vertex indices that form loops around joints */],
+  "topology": "earcut-v1"          // Identifies the triangulation method
 }
 ```
 
-## 4. Scene Data Schema (`scene.json`)
+## 4. Scene data
 
 ```jsonc
 {
   "instances": [
     {
       "instanceId": "inst-001",
-      "assetId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
-      "position": { "x": 0, "y": 0, "z": -50 },
+      "assetId": "<asset-id>",
+      "position": { "x": 0, "y": 0, "z": 0 },  // z = depth
       "scale": { "x": 1, "y": 1 },
       "rotation": 0
     }
   ],
   "camera": {
-    "type": "orthographic",
-    "position": { "x": 0, "y": 0, "z": 500 },
-    "zoom": 1.0,
+    "type": "orthographic",         // orthographic | perspective
+    "position": { "x": 0, "y": 0, "z": 100 },
+    "zoom": 1,
     "near": 0.1,
-    "far": 2000
+    "far": 1000
   },
   "lights": [
     {
       "lightId": "light-001",
       "type": "directional",
-      "direction": { "x": -0.5, "y": -1.0, "z": -0.5 },
+      "direction": { "x": -1, "y": -1, "z": -1 },
       "color": "#ffffff",
       "intensity": 1.0,
       "castShadow": true
@@ -208,21 +225,21 @@ Calibrated joint coordinates for Mixamo-style auto-rigging (refer to [AUTO_RIG.m
     {
       "type": "plane",
       "normal": { "x": 0, "y": 1, "z": 0 },
-      "offset": -200
+      "offset": -100
     }
   ]
 }
 ```
 
-## 5. Timeline Schema (`timeline.json`)
+## 5. Timeline and animation
 
 ```jsonc
 {
-  "duration": 10.0,
+  "duration": 10.0,                 // seconds
   "tracks": [
     {
       "trackId": "track-001",
-      "targetType": "instance",
+      "targetType": "instance",     // instance | camera | light
       "targetId": "inst-001",
       "clips": [
         {
@@ -231,9 +248,9 @@ Calibrated joint coordinates for Mixamo-style auto-rigging (refer to [AUTO_RIG.m
           "endTime": 5.0,
           "keyframes": [
             {
-              "time": 0.0,
+              "time": 0.0,          // seconds, relative to startTime
               "property": "position.x",
-              "value": 0.0,
+              "value": 0,
               "easing": "ease-in-out"
             }
           ]
@@ -244,44 +261,48 @@ Calibrated joint coordinates for Mixamo-style auto-rigging (refer to [AUTO_RIG.m
 }
 ```
 
-All timeline timestamps are denominated in fractional seconds. Conversions to discrete frame indices:
-`frameIndex = time * fps`.
+Timeline time is always measured in seconds. Convert to a frame index with
+`frameIndex = time × fps`. See [RENDER_PROFILES.md](RENDER_PROFILES.md) for the three
+types of FPS and the sampling method.
 
-## 6. Persistence & Atomic File Operations
+## 6. Saving and opening a project
 
-### Atomic Save Protocol
+### Save
 
-1. State is serialized into memory according to strict Zod contracts.
-2. Written to temporary sidecar files (`<filename>.tmp`).
-3. Atomically renamed onto target paths to guarantee crash resistance.
-4. Global `revision` incremented upon confirmed write.
-5. Thumbnail generation and cache updates execute asynchronously in background tasks.
+1. Serialize the current state to JSON according to the schema.
+2. Write a temporary file (`<file>.tmp`) and then rename it atomically to prevent corruption
+   if a crash occurs mid-write.
+3. Update the `revision` in the manifest.
+4. Write caches (thumbnail, atlas) separately; they do not block saving.
 
-### Load Protocol
+### Load
 
-1. Read `manifest.json` and validate `schemaVersion`.
-2. Execute automated migration if necessary.
-3. Validate entity referential integrity (e.g., scene instances must map to existing asset entries).
-4. Lazy-load GPU textures and vertex buffers on demand; never read entire assets into RAM at once.
+1. Read `manifest.json` and check `schemaVersion`.
+2. Migrate if needed (see section 2).
+3. Validate references: every asset ID in a scene must exist in the manifest.
+4. Lazy-load textures and meshes; do not read every image into RAM when opening the project.
+5. Report a specific error for a missing file, invalid ID, or unsupported schema version.
 
-### Autosave & Crash Recovery
+### Autosave and recovery
 
-- Autosave snapshots written periodically (default 2 minutes) into `.autosave/`.
-- Project startup checks for newer autosaves and prompts the user for recovery.
-- Never silently overwrite user files with autosave snapshots.
+- Autosave periodically (every two minutes by default) into a separate temporary directory.
+- When opening a project, if an autosave is newer than the manifest, ask the user whether to
+  restore it.
+- Never silently overwrite the original project with an autosave.
 
-## 7. Source vs. Cache Categorization
+## 7. Source versus cache
 
-| Category | Typical Contents | Recoverable? | Version Control (Git) |
+| Type | Examples | Can be deleted? | Stored in VCS? |
 | --- | --- | --- | --- |
-| Source | Raw images, `manifest.json`, `rig.json`, `mesh.json`, `timeline.json` | ❌ Irreplaceable | ✅ Tracked |
-| Cache | Thumbnails, packed atlases, render buffer frames | ✅ Regenerable | ❌ Ignored (`.gitignore`) |
-| History | Undo/redo stack, transaction logs | Transient | ❌ Ignored |
+| Source | Original images, rig, mesh, scene, timeline | ❌ | ✅ |
+| Cache | Thumbnails, atlases, temporary render frames | ✅ | ❌ (.gitignore) |
+| History | Undo stack, snapshot | Depends on policy | ❌ |
 
-## 8. Documentation References
+## 8. References
 
-- [PLAN.md](PLAN.md) — Master product scope and architecture
-- [COMMAND_BUS.md](COMMAND_BUS.md) — Command bus, revision sequencing, and undo/redo
-- [MODULE_MAP.md](MODULE_MAP.md) — Package ownership and contracts boundary
-- [AUTO_RIG.md](AUTO_RIG.md) — Landmark detection and auto-rigging specifications
-- [UI_SPECIFICATION.md](UI_SPECIFICATION.md) — Editor UI and workspace panel layouts
+- [PLAN.md](PLAN.md) sections 5 and 7 — project-format requirements
+- [COMMAND_BUS.md](COMMAND_BUS.md) — how revision and undo interact with project saving
+- [MODULE_MAP.md](MODULE_MAP.md) — `packages/contracts/src/` owns schemas, and
+  `apps/service/src/adapters/persistence/` owns I/O
+- [AUTO_RIG.md](AUTO_RIG.md) — landmark and auto-rig format details
+- [UI_SPECIFICATION.md](UI_SPECIFICATION.md) — UI interaction with the project structure

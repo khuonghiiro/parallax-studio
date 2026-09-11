@@ -1,80 +1,108 @@
 ---
 name: parallax-development
-description: Implement, refactor, or review Parallax Studio image-based 2D animation and 2.5D filmmaking code using its module ownership, shared runtime and readability rules. Use for this repository's code and architecture changes.
+description: Implement, refactor, or review Parallax Studio image-based 2D animation and 2.5D filmmaking code using its module ownership, shared runtime, team coordination, and readability rules.
 ---
 
 # Parallax development
 
-Use this skill within the Parallax Studio repository. It does not grant permission
-to implement features when the user only asked for a plan.
+Use this skill for Parallax Studio source, architecture, test, or documentation
+work. It does not turn a planning request into permission to implement features.
 
-## Load project context
+## Load only the relevant context
 
-Resolve paths from the repository root, not the skill directory:
+Resolve paths from the repository root. Read `AGENTS.md`, then every nested
+`AGENTS.md` that applies to files in scope.
 
-- Read `AGENTS.md` and `docs/CODING_RULES.md` before source changes.
-- Read `docs/MODULE_MAP.md` to identify the owner and allowed dependencies.
-- Read the relevant section of `docs/PLAN.md` for the current product direction.
-- For AI-created assets, read `docs/IMAGE_WORKFLOW.md`: the client generates
-  images, and MCP ingests real artifacts; do not add a default local model service.
-- For rendering, read `docs/RENDER_PROFILES.md`: 2K/4K at 60/120 output FPS,
-  RTX 3060 12 GB target, bounded buffers and shared deterministic sampling.
+Read `docs/CODING_RULES.md`, `docs/MODULE_MAP.md`, and the relevant part of
+`docs/PLAN.md` before source changes. `docs/` is the English mirror used by AI;
+`docs_vi/` is canonical. When changing requirements or decisions, update the
+Vietnamese source and its English translation together according to
+`docs/DOCUMENTATION_POLICY.md`.
 
-The current design is image-based: layered artwork, flat meshes, bones, deformers,
-view sets, camera/light and filmmaking. Do not reintroduce Blender/Godot or a 3D
-model authoring pipeline from the earlier draft unless the user changes the scope.
+Load domain documents only when relevant:
 
-## Choose the module before writing code
+- Images and layered assets: `docs/IMAGE_WORKFLOW.md`.
+- Rigging and weights: `docs/AUTO_RIG.md`.
+- Project data and commands: `docs/PROJECT_FORMAT.md` and `docs/COMMAND_BUS.md`.
+- Rendering and export: `docs/DEFORMATION_PIPELINE.md` and `docs/RENDER_PROFILES.md`.
+- UI: `docs/UI_SPECIFICATION.md`.
+- MCP: `docs/MCP_TOOLS.md`.
+- Delegation: `docs/AI_TEAM_PROTOCOL.md`.
 
-Search existing code and callers with `rg`. Identify whether the work belongs to
-contracts, rig, geometry, deformation, views, animation, runtime, application,
-transport or a UI feature. Use the ownership table instead of a generic shared file.
+## Coordinate work when the task benefits from a team
 
-Keep one implementation of each business rule. UI/MCP use the same application
-commands; preview/export use the same pose evaluator. Native adapters may handle
-I/O differently but must not duplicate rig or timeline algorithms.
+The lead may delegate bounded, independent work using the role charters in
+`.agents/agents/` and the Codex adapters in `.codex/agents/`. Do not delegate a
+small single-owner edit merely to simulate a team.
 
-If a shared module grows, split its responsibilities into named submodules and
-update its callers. Do not create numbered file fragments or a new large utilities file.
+Before delegation, define the objective, file ownership, contracts, acceptance
+criteria, checks, and excluded files. Do not give parallel agents overlapping
+write ownership. Stabilize shared contracts before dependent implementation.
+The lead integrates every contribution and performs the final review.
 
-## Apply domain invariants when relevant
+## Choose the owner before writing code
 
-- Rig: valid acyclic hierarchy, rest pose, local/world transforms, normalized weights.
-- Views: stable pivots/draw order; morph only across compatible topology.
-- Deform: one documented ordering shared by preview and export.
-- Shadows: alpha silhouette and deformed pose agree with the visible asset.
-- Commands: revision-aware transaction, consistent undo and readable failures.
-- Export: deterministic frame time, bounded buffers, snapshot revision, cancellation.
-- Image handoff: verify actual file, dimensions, alpha and provenance; never
-  substitute a planned or displayed image for an imported source artifact.
-- Output: exact resolution/FPS; probe encoder support and report real-time
-  performance separately. Do not silently lower quality or duplicate 60 FPS frames.
-- Resources: explicit ownership and disposal of textures, geometry and workers.
+Search existing code and callers with `rg`. Classify the change as contracts,
+geometry, rig, deformation, views, animation, scene, runtime, application,
+transport, desktop integration, or an editor feature. Use the module map rather
+than a generic shared file.
 
-Test the invariants touched by the task. Do not build unrelated features to exercise them.
+Keep one implementation of every business rule. UI and MCP use the same
+application commands. Preview and export use the same sampler and deformation
+pipeline. Native adapters may differ in I/O but do not copy rig, timeline,
+scene, or validation algorithms.
 
-## Keep source maintainable
+If a module grows, split it by named responsibilities with small public APIs.
+Do not create numbered fragments, broad utility files, or barrels that hide
+cycles and unnecessary exports.
 
-Follow the canonical coding rules, including the 800-line limit and multiline
-formatting. Do not imitate compressed code in `src/`, `shared/` or `engine/`.
-Do not use casts, empty catches or generated-file exclusions to hide unfinished work.
+## Separate state and operations
 
-For planning tasks, edit plans, rules and supporting checks only. For an explicit
-implementation request, proceed within the authorized scope without asking again
-solely because a planning document still has a pending status.
+- Durable project mutations go through revision-aware application transactions.
+- Selection, active tool, panel state, playhead preview, and other ephemeral
+  editor state remain in the editor session unless explicitly persisted.
+- Queries, evaluation, preview, and render reads do not masquerade as project
+  mutations.
+- Pointer drags and brush strokes preview during the gesture and commit one
+  coherent history entry at the boundary.
+
+## Preserve domain invariants
+
+- Rig: acyclic hierarchy, rest/bind pose, local/world transforms, and normalized
+  bounded influences.
+- Geometry: validated contours, indices, UVs, topology, and deterministic failure
+  behavior; do not assume a triangulator repairs invalid input.
+- Views: stable pivots and draw order; morph only across compatible topology.
+- Deformation: one documented coordinate-space order shared by preview/export.
+- Shadows: use the deformed alpha silhouette and light-space geometry.
+- Commands: transaction-level revision, explicit idempotency, readable failures,
+  and staged external side effects.
+- Export: exact resolution/FPS, deterministic timebase, bounded buffers,
+  snapshot revision, cancellation, and encoder capability probing.
+- Image handoff: verify real artifacts, paths, dimensions, alpha, quotas, hashes,
+  and provenance; never substitute a displayed preview for an imported source.
+- Resources: explicit ownership and disposal of textures, geometry, workers, and
+  native processes.
+
+Test only the invariants touched by the task.
+
+## Keep implementation readable
+
+Follow the canonical coding rules, including the 800-line physical limit and
+multiline formatting. Do not imitate compressed code in `src/`, `shared/`, or
+`engine/`. Do not use casts, empty catches, exclusions, or generated markers to
+hide unfinished handwritten code.
+
+For planning tasks, change specifications, rules, and supporting checks only.
+For an explicit implementation request, complete the authorized scope without
+asking again merely because a document still has proposed status.
 
 ## Verify and report
 
-Run `node scripts/quality/check-source-limits.mjs` and the relevant installed
-formatter, type, dependency and behavior checks. Inspect available scripts first;
-the existing draft contains unfinished imports and npm commands.
+Inspect available scripts and installed dependencies before selecting checks.
+Run the source limit check, documentation sync check, and relevant formatter,
+type, dependency, behavior, or visual checks for the files changed.
 
-If editing the size checker, also run:
-
-```sh
-node --test scripts/quality/source-limits.test.mjs
-```
-
-Distinguish newly introduced failures from the known compressed draft. Report
-exactly what was checked; do not claim the full app or another OS was validated.
-Update the module map when ownership or a public interface changes.
+If editing a checker, run its dedicated Node test. Distinguish new failures from
+the compressed legacy draft. Report exactly what ran; do not claim another OS,
+GPU, encoder, or full application was validated without evidence.

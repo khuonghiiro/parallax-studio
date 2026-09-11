@@ -3,6 +3,10 @@
 Đây là nguồn quy tắc chung cho AI và người sửa code trong dự án. Quy tắc do người
 dùng yêu cầu có hiệu lực ngay; kiến trúc sản phẩm còn là đề xuất chờ duyệt.
 
+File này là bản tiếng Việt gốc. Bản dịch cho AI nằm tại
+`docs/CODING_RULES.md`; thay đổi phải đồng bộ theo
+[chính sách tài liệu](DOCUMENTATION_POLICY.md).
+
 ## 1. Giới hạn file và trách nhiệm
 
 - File source viết tay không được vượt **800 dòng vật lý**.
@@ -128,10 +132,13 @@ Công cụ hiện có, không cần dependency:
 ```sh
 node scripts/quality/check-source-limits.mjs
 node --test scripts/quality/source-limits.test.mjs
+node scripts/quality/check-doc-sync.mjs
+node --test scripts/quality/doc-sync.test.mjs
 ```
 
 - Hơn 800 dòng/file làm check thất bại.
 - Dòng source dài hơn 120 ký tự được báo và làm check thất bại.
+- Doc-sync kiểm tra đủ cặp file, revision, review status và hash hiện hành.
 - Check này không kiểm tra syntax, semantic duplicate, import boundary hay toàn bộ style.
 
 Khi triển khai mốc 0, bổ sung dependency khóa phiên bản và gate sau:

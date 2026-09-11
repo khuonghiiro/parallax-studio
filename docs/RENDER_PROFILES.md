@@ -1,75 +1,127 @@
-# Parallax Studio — Render Profiles & GPU Target Specification
+# Video Profiles and Target GPU
 
-This document defines output resolution presets, high-framerate export standards (60/120 FPS),
-hardware video encoder integration (NVENC), and GPU memory budgets.
-Target Hardware: NVIDIA GeForce RTX 3060 (12 GB VRAM).
+Status: output specification for implementation; the app has not yet been
+benchmarked or rendered.
+Target GPU provided by the user: NVIDIA RTX 3060 with 12 GB VRAM.
 
-## 1. Mandatory Output Presets
+## 1. Required presets
 
-| UI Label | Dimensions (px) | Aspect Ratio | Export Framerate Options |
-| --- | --- | --- | --- |
-| Full HD | 1920 × 1080 | 16:9 | 24, 30, 60, 120 |
-| 2K DCI | 2048 × 1080 | 1.90:1 (256:135) | 24, 30, 60, 120 |
-| QHD / 1440p | 2560 × 1440 | 16:9 | 24, 30, 60, 120 |
-| 4K UHD | 3840 × 2160 | 16:9 | 24, 30, 60, 120 |
-| 4K DCI | 4096 × 2160 | 1.90:1 (256:135) | 24, 30, 60, 120 |
+| UI label | Dimensions | Output FPS |
+| --- | --- | --- |
+| Full HD | 1920 × 1080 | 24, 30, 60, 120 |
+| 2K DCI | 2048 × 1080 | 24, 30, 60, 120 |
+| QHD / 1440p | 2560 × 1440 | 24, 30, 60, 120 |
+| 4K UHD | 3840 × 2160 | 24, 30, 60, 120 |
+| 4K DCI | 4096 × 2160 | 24, 30, 60, 120 |
 
-- The UI explicitly displays exact pixel dimensions alongside labels to prevent confusion between 2K DCI and 1440p.
-- Switching aspect ratio presets adjusts camera framing and safe area overlays without stretching pixel geometry.
-- Default preset: **4K UHD @ 60 FPS** (user-configurable).
-- 120 FPS output is a strict functional mandate: the engine samples scene transforms at 120 discrete timestamps
-  per second. Duplicating 60 FPS frames or altering container metadata to fabricate 120 FPS is prohibited.
+The UI displays the actual dimensions because “2K” may be used to mean 1440p
+in everyday communication. Changing presets must update camera framing and the
+safe area appropriately; it must not stretch the image to fit a different
+aspect ratio. Proposed default: 4K UHD / 60 FPS; the user can change it.
 
-## 2. Decoupled Framerate Architecture
+120 FPS output is a functional requirement: sample the scene at 120 points in
+time per second. Do not merely duplicate 60 FPS frames or change metadata. Hold
+poses in hand-drawn animation remain held when that is the clip's intent; this
+does not force every drawing to be different.
 
-1. **Timeline FPS**: The temporal subdivision unit for authoring keyframes and clips (typically 24 or 30 FPS).
-2. **Preview FPS**: The interactive editor viewport refresh rate (target 60 FPS; optional 120 FPS on high-refresh monitors).
-3. **Output FPS**: The exact temporal sampling frequency and frame count of the exported video file (24, 30, 60, 120 FPS).
+## 2. Separate the three rates
 
-Sample timestamp formula:
-$$\text{timestamp} = \frac{\text{frameIndex}}{\text{outputFps}}$$
+- Timeline FPS: the frame division used when the user places keys or clips.
+- Preview FPS: the viewport update target, proposed as 60 with an optional 120
+  where appropriate.
+- Output FPS: the timestamps and frame count of the film, independent of actual
+  rendering speed.
 
-The core pose evaluator is identical across preview and export. Preview may drop viewport frames or downsample
-resolution under heavy GPU load; offline export renders every consecutive frame without frame dropping.
-Offline 4K @ 120 FPS rendering executing slower than real-time is expected and acceptable.
+Frame sampling time is `frameIndex / outputFps`. The pose, warp, and view
+sampler is shared with preview; there is no separate interpolation algorithm
+for 120 FPS. Preview may reduce resolution or shadow quality; export uses the
+selected profile exactly. If preview must skip a frame to remain interactive,
+export must still sample every frame.
 
-## 3. GPU Acceleration & Hardware Encoding
+4K/120 FPS may render offline more slowly than real time. Do not infer from
+12 GB VRAM that every scene can preview at 4K/120 FPS; measure the GPU, CPU,
+frame transfer, encoder, disk, and playback capability of the output device.
 
-- Three.js utilizes GPU acceleration for skeletal deformation, mesh shaders, normal mapping, and shadow map generation.
-- Native FFmpeg pipelines prioritize `h264_nvenc` and `hevc_nvenc` when supported by NVIDIA drivers.
-- H.264 is prioritized for universal playback compatibility; HEVC is prioritized for 4K bandwidth efficiency.
-- Encoders are verified dynamically by encoding a short probe clip upon service initialization.
-- Deterministic CPU software fallback (`libx264`, `libx265`) activates when NVENC is unavailable, preserving
-  selected resolution and framerate without silent quality degradation.
-- Documented references: [NVIDIA FFmpeg Guide][nvidia-ffmpeg], [NVENC Application Note][nvenc].
+## 3. GPU and encoder
 
-## 4. VRAM Budget & Memory Management
+- Three.js uses the GPU for meshes, skinning, materials, and shadows.
+- FFmpeg prefers `h264_nvenc` or `hevc_nvenc` when the driver and binary
+  support them.
+- H.264 is preferred for compatibility; HEVC is an option for high-resolution
+  content.
+- Probe the encoder and then encode a short clip with the target profile; do
+  not rely only on the GPU name or whether `ffmpeg -encoders` lists the codec.
+- Provide an explicit software-encoder fallback when NVENC is unavailable;
+  preserve the selected resolution and FPS rather than silently lowering
+  quality to report success.
+- AV1 hardware encoding is not required on this target GPU.
+- `4K` and `120 FPS` do not by themselves guarantee image quality: provide
+  compression-quality presets, preview banding/detail/alpha edges, and record
+  the actual encoder and settings.
 
-- A single uncompressed $3840 \times 2160$ RGBA8 frame requires **31.64 MiB**.
-- One minute of 120 FPS video equates to 7,200 frames ($\approx \mathbf{222.47\text{ GiB}}$), far exceeding hardware VRAM limits.
-- Rendered frames stream to the encoder through a bounded ring buffer (2–4 frames) with backpressure flow control.
-- Never retain full sequences or all multi-angle textures simultaneously in GPU memory.
-- Assets employ texture sharing and LRU cache eviction under memory pressure.
-- Textures, render targets, buffers, and subprocess pipes are deterministically disposed of upon job completion or cancellation.
+NVIDIA describes NVENC and FFmpeg integration for H.264/HEVC encoding. Each
+codec/profile/FPS combination must be tested on the actual GPU and driver.
+[NVIDIA FFmpeg][nvidia-ffmpeg], [NVENC application note][nvenc].
 
-## 5. Export Job Lifecycle & Fault Recovery
+## 4. Memory and pipeline
 
-- Each export job binds to an immutable `snapshotRevision`, frame range, resolution, framerate, and codec preset.
-- Progress reporting includes completed frame count, encoding phase, throughput FPS, and estimated time remaining.
-- Cancelling a job immediately terminates the FFmpeg subprocess and releases GPU memory buffers.
-- Failed or aborted jobs are never marked as complete.
-- Initial release requires the desktop app to remain open during export (`waiting_renderer` state emitted if closed).
+- One 3840×2160 RGBA8 frame is approximately 31.64 MiB. Keeping every raw frame
+  for one minute at 120 FPS would require approximately 222.47 GiB, far beyond
+  the target VRAM.
+- Stream through a small ring buffer, initially 2–4 frames, with backpressure
+  from the encoder.
+- Do not keep the whole film, every image from every angle, or every render
+  target on the GPU at the same time.
+- Share textures and geometry by asset, lazy-load required angles, and evict
+  according to a budget.
+- Atlases and mipmaps count toward the budget; 2D meshes also use alpha, normal,
+  and shadow resources.
+- Dispose of textures, geometry, render targets, streams, and encoders
+  when a job is canceled or closed.
+- GPU readback may be the bottleneck; measure it before adding Rust/WASM or a
+  duplicate runtime.
+- Manage VRAM according to active resources and workload; the app does not have
+  exclusive access to all 12 GB when the OS and other applications also use
+  the GPU.
 
-## 6. Verification Protocol & Acceptance Criteria
+## 5. Jobs and recovery
 
-1. **Preset Contract Test**: Verifies all resolution and framerate combinations, ensuring valid dimensions and strict sample counts.
-2. **Deterministic Frame Test**: A 2.0-second export at 60 FPS must yield exactly 120 frames; at 120 FPS exactly 240 frames.
-3. **Format Matrix Test**: Validates encoded video containers via FFprobe, asserting dimensions, color matrix, framerate, and duration.
-4. **Visual Consistency Test**: Asserts pixel-level equivalence between preview and export frames at identical timestamps.
-5. **Hardware Benchmark Matrix (RTX 3060 Target)**:
-   - Reference workload: 10 rigged characters, 20 layered prop cards, 1 directional shadow-casting light.
-   - Measures: Median/p95 frame times, export duration, VRAM peak consumption, encoder saturation.
-6. **Cross-Platform Verification**: Separate test passes for Windows (DirectX/Vulkan backend via Tauri) and Linux (OpenGL/Vulkan).
+- A job stores the snapshot revision, frame range, dimensions, FPS, codec, and
+  quality preset.
+- Provide per-frame progress, encoding status, and complete errors; remaining
+  time is an estimate.
+- Canceling a job closes the encoder and releases buffers. A failed job must
+  not appear as complete.
+- Resume requires intermediate frames/chunks or saved segments; do not promise
+  arbitrary continuation of a partially encoded MP4 stream. Decide the
+  checkpoint strategy after the export spike.
+- The first release requires a renderer in the open app. The no-renderer state
+  must be `waiting_renderer`; headless mode is a later extension.
+
+## 6. Tests and acceptance criteria
+
+1. Unit/contract: every valid preset, the 120 FPS limit, width/height pairs,
+   correct timestamps, and migration of old projects without truncating FPS.
+2. Two-second integration clip: 60 FPS has 120 frames and 120 FPS has 240
+   frames; dimensions, duration, and pose sampling are correct; wall-clock time
+   is not used as the timestamp.
+3. Short-clip matrix: 2K DCI, QHD, 4K UHD, and 4K DCI presets × 60/120 FPS.
+4. Inspect the file by probing and decoding it; view the first, middle, and last
+   frames, color, camera, alpha edges, and shadows rather than checking only FPS
+   metadata.
+5. Compare preview and export at the same time with the same quality settings.
+6. Test cancellation, encoder failure, renderer disconnection, low VRAM, and
+   queue behavior.
+7. Measure on the RTX 3060: preview p50/p95 frame time, render/encode time, and
+   CPU/RAM/VRAM; the reference workload is 10 rigged characters, 20
+   layers/props, and one shadow-casting light.
+8. Test Windows and Linux separately; do not infer that one OS passes because
+   the other does.
+
+The 60 FPS/1080p limits in the current draft do not satisfy the new
+requirements. Implementation must update the contract, UI, exporter, and tests
+from one profile-definition source; this planning pass has not changed runtime
+source or created a proof video.
 
 [nvidia-ffmpeg]: https://docs.nvidia.com/video-technologies/video-codec-sdk/13.1/ffmpeg-with-nvidia-gpu/index.html
 [nvenc]: https://docs.nvidia.com/video-technologies/video-codec-sdk/13.0/nvenc-application-note/index.html

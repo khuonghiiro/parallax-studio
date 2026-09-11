@@ -148,15 +148,22 @@ Asserted across at least 3 temporal milestones (beginning, midpoint, end of clip
    node --test scripts/quality/source-limits.test.mjs
    ```
    No file exceeds 800 physical lines; no source line exceeds 120 characters.
-2. **TypeScript Strict Typecheck**: `tsc -b --noEmit`.
-3. **Automated Unit & Integration Test Suite**: `vitest run`.
-4. **Code Formatting Check**: `prettier --check .`.
+2. **Documentation Sync Gate**:
+   ```sh
+   node scripts/quality/check-doc-sync.mjs
+   node --test scripts/quality/doc-sync.test.mjs
+   ```
+   Every document has a current pair, revision, review state, and hash. Documents
+   required by a feature receive semantic review before implementation.
+3. **TypeScript Strict Typecheck**: `tsc -b --noEmit`.
+4. **Automated Unit & Integration Test Suite**: `vitest run`.
+5. **Code Formatting Check**: `prettier --check .`.
 
 ### Advisory Inspection Gates
 
-5. **Dependency Boundary Graph**: Enforces directional imports per `MODULE_MAP.md`.
-6. **Code Duplication Check**: Detects semantic and structural code duplication.
-7. **Performance Regression Check**: Flags frame time increases $> 10\%$ against baseline.
+6. **Dependency Boundary Graph**: Enforces directional imports per `MODULE_MAP.md`.
+7. **Code Duplication Check**: Detects semantic and structural code duplication.
+8. **Performance Regression Check**: Flags frame time increases $> 10\%$ against baseline.
 
 ## 6. Test Directory Structure
 

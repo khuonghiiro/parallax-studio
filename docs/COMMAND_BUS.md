@@ -1,200 +1,246 @@
-# Parallax Studio — Command Bus, Transactions & Undo/Redo
+# Command Bus, undo/redo, and transactions
 
-This document specifies the authoritative Command Bus architecture, transactional execution,
-and undo/redo history mechanics. Codified under `packages/application/`.
+Status: proposed design. This has not been implemented in the source; this document defines
+the architecture and constraints for Milestones 0–1.
 
-## 1. Architectural Role
+## 1. Role
 
-The Command Bus is the sole authoritative gateway for mutating project state.
-Both the Editor UI and external MCP tools dispatch commands through this bus rather than mutating
-in-memory state directly. This guarantees:
+The Command Bus is the sole coordination layer for every project-state change. Both the UI and
+MCP go through the Command Bus instead of mutating state directly. This ensures:
 
-- A single authoritative source of truth for project state.
-- Identical undo/redo semantics whether mutations originate from user clicks or AI agent tools.
-- Complete audit trails, monotonic revision numbering, and deterministically replayable mutations.
+- A single source of truth for project state.
+- Consistent undo/redo regardless of whether a change originates from the UI or MCP.
+- Every change has a revision, audit trail, and replay capability.
 
 ```mermaid
 flowchart LR
-  UI[Editor UI] --> D[Dispatch Bus]
-  MCP[MCP Adapter] --> D
+  UI[Editor UI] --> D[Dispatch]
+  MCP[MCP adapter] --> D
   D --> R[Command Registry]
-  R --> H[Domain Handler]
+  R --> H[Handler]
   H --> S[Project State]
   H --> Hist[History Stack]
   S --> UI
   S --> MCP
 ```
 
-## 2. Command Structure
+## 2. Command structure
 
-Every command is an immutable data object specifying an **intent to mutate**, not the imperative mutation steps.
+Each command is an immutable object that describes the **intent of a change**, not how the
+change is performed.
 
 ```ts
-export interface Command<TPayload = unknown, TResult = unknown> {
-  /** Unique command type identifier, e.g. "rig.add-bone" */
+interface Command<TPayload = unknown, TResult = unknown> {
+  /** Command type used to find the handler. Example: "rig.add-bone" */
   readonly type: string;
 
-  /** Strongly typed input payload conforming to domain contracts */
+  /** Input data for the command */
   readonly payload: TPayload;
 
-  /** Unique dispatch instance UUID v4 for idempotency checking */
+  /** Unique ID for this dispatch (UUID v4) */
   readonly commandId: string;
 
-  /** Expected project revision at the moment of command creation */
+  /** Project revision at the time the command was created */
   readonly baseRevision: number;
 }
 ```
 
-### Naming Conventions
-
-Commands follow `<domain>.<action>` names matching directories in `packages/application/src/commands/`:
+### Type naming convention
 
 ```text
-asset.create
-asset.import-image
-asset.attach-view
-mesh.generate
-mesh.refine
-rig.add-bone
-rig.adjust-landmark
-rig.set-weights
-animation.set-keyframe
-animation.delete-clip
-scene.add-instance
-scene.set-camera
-export.start-job
-export.cancel-job
-project.save
+<domain>.<action>
+
+Examples:
+  asset.create
+  asset.import-image
+  asset.attach-view
+  rig.add-bone
+  rig.set-weights
+  animation.set-keyframe
+  animation.delete-clip
+  scene.add-instance
+  scene.set-camera
+  export.start-job
+  export.cancel-job
+  project.save
 ```
 
-## 3. Command Handlers
+The domain matches a directory in `packages/application/src/commands/`.
 
-Every command type is handled by exactly one registered domain handler.
-Handlers receive the immutable command and current project state, executing validation and pure transformations.
+## 3. Handler
+
+Each command type has exactly one handler. The handler receives the command and current state,
+then returns the result and undo information.
 
 ```ts
-export interface CommandHandler<TPayload, TResult> {
+interface CommandHandler<TPayload, TResult> {
   readonly type: string;
 
-  /** Pure validation of payload against current project state prior to execution */
+  /** Validate the payload and state before execution */
   validate(command: Command<TPayload>, state: ProjectState): ValidationResult;
 
-  /** Pure state transformation producing updated state and compensating inverse command */
+  /** Execute the command and return the result and inverse command for undo */
   execute(
     command: Command<TPayload>,
     state: ProjectState,
   ): CommandResult<TResult>;
 }
 
-export interface CommandResult<TResult> {
+interface CommandResult<TResult> {
+  /** Result returned to the caller */
   result: TResult;
+
+  /** New state after applying the command */
   newState: ProjectState;
+
+  /** Reverse command for undo. null if the command cannot be undone */
   inverse: Command | null;
+
+  /** New revision */
   newRevision: number;
 }
 ```
 
-### Handler Invariants
+### Handler rules
 
-- Handlers must never import React, the DOM, Three.js, or file system APIs.
-- Handlers produce new state objects immutably; in-place mutations on existing state are prohibited.
-- Validation is decoupled from execution, enabling dry-run checks prior to commit.
-- Validation failures return structured error messages; unhandled exceptions are prohibited.
+- A handler does not import React, the DOM, Three.js, or direct I/O.
+- A handler only reads the old state and creates a new state; it does not mutate the old state
+  in place.
+- Validation is separate from execution so the caller can use a dry run to check the command.
+- A validation failure returns a readable message and does not throw an uncontrolled exception.
 
-## 4. Registry and Dispatch
+## 4. Registry and dispatch
 
 ```ts
-export class CommandBus {
+class CommandBus {
   private handlers = new Map<string, CommandHandler>();
   private history: HistoryStack;
 
+  /** Register a handler for a command type */
   register(handler: CommandHandler): void;
-  dispatch<TPayload, TResult>(command: Command<TPayload>): DispatchResult<TResult>;
+
+  /** Dispatch and execute a command */
+  dispatch<TPayload, TResult>(
+    command: Command<TPayload>,
+  ): DispatchResult<TResult>;
+
+  /** Dispatch multiple commands as one transaction */
   dispatchBatch(commands: Command[]): BatchResult;
 }
 ```
 
-### Concurrency & Conflict Detection
+### Conflict detection
 
-- The incoming `baseRevision` is validated against the active state revision.
-- In single-user desktop mode, out-of-order commands with non-conflicting field targets
-  may merge cleanly; structural mutations (creating or deleting assets/bones) reject on revision conflict.
+- The command's `baseRevision` is compared with the current revision.
+- If the revisions do not match, the handler decides whether it can proceed or must reject.
+- By default, commands that create or delete entities reject on conflict; a command that changes
+  a property may merge if it does not overlap the conflicting property.
 
-## 5. Transactions (Batch Execution)
+## 5. Transaction (batch)
 
-When multiple operations must commit atomically:
+When multiple commands must execute atomically:
 
 ```ts
-export interface BatchResult {
+interface BatchResult {
+  /** Success means all commands were committed */
   success: boolean;
+
+  /** On failure, state is rolled back to its value before the batch */
   error?: string;
+
+  /** Results for individual commands, when successful */
   results: CommandResult[];
+
+  /** One inverse used to undo the complete batch */
   batchInverse: Command[];
 }
 ```
 
-### Transaction Rules
+### Batch rules
 
-- All-or-nothing atomicity: if command $N$ in a batch fails, commands $1 \dots N-1$ are rolled back immediately.
-- A batch creates a single composite entry in the undo/redo history stack.
-- MCP agents utilize batching for composite workflows (e.g., create asset + import artwork + generate mesh + auto-rig).
-- Batch size is capped at 50 commands per transaction to bound memory pressure.
+- All or nothing: if command N fails, roll back commands 1 through N-1.
+- A batch creates one entry in the history stack, not N separate entries.
+- MCP commonly uses a batch for compound operations, for example creating an asset, importing
+  an image, generating a mesh, and creating a rig in one operation.
+- A batch has a command-count limit (50 by default) to prevent excessively large transactions.
 
-## 6. Undo/Redo Engine
+## 6. Undo/redo
 
-### Inverse Command Pattern
+### Strategy: command-based inverse
 
-Every executed command generates a concrete inverse command. Undo executes the inverse command.
+When executed, each command returns an inverse command. Undo dispatches that inverse command.
 
 ```text
-Action:         rig.add-bone { name: "arm", parentId: "spine" }
-State:          Bone "arm" added, Revision 43
+User action:    rig.add-bone { name: "arm", parentId: "spine" }
+State:          bone "arm" added, revision 43
 Inverse:        rig.delete-bone { boneId: "arm-uuid" }
 
-Undo Trigger:   Dispatch inverse → Bone "arm" deleted, Revision 44
-Redo Trigger:   Dispatch original command → Bone "arm" restored, Revision 45
+Undo:           dispatch inverse → bone "arm" removed, revision 44
+Redo:           dispatch original command again → bone "arm" added again, revision 45
 ```
 
-### History Stack
+### History stack
 
 ```ts
-export interface HistoryStack {
+interface HistoryStack {
+  /** Add a new entry and clear the redo stack after it */
   push(entry: HistoryEntry): void;
+
+  /** Undo: dispatch the inverse and move the entry to the redo stack */
   undo(): UndoResult;
+
+  /** Redo: dispatch the original command and move it back to the undo stack */
   redo(): RedoResult;
+
+  /** Entry limit (100 by default) */
   readonly maxEntries: number;
+
+  /** Clear history when switching projects or when requested */
   clear(): void;
 }
 
-export interface HistoryEntry {
+interface HistoryEntry {
+  /** Original command that was executed */
   command: Command;
+
+  /** Inverse command for undo */
   inverse: Command;
+
+  /** Timestamp */
   timestamp: number;
+
+  /** Short description displayed in the UI */
   description: string;
 }
 ```
 
-- Default history depth is capped at 100 entries.
-- Oldest entries drop off the stack when capacity is reached.
-- Committing a new forward command purges the redo stack.
-- Non-undoable commands (e.g., starting an offline export job) do not push onto the history stack.
+### Limits and edge cases
 
-## 7. Monotonic Revisions and Persistence
+- The history stack has a fixed limit (100 entries by default, configurable).
+- The oldest entry is removed when the stack is full, so undo is not unlimited.
+- Dispatching a new command clears the redo stack (standard behavior).
+- A batch command creates one entry; undoing a batch dispatches all inverses in reverse order.
+- A command without an inverse, such as video export, is not added to the history stack.
 
-- Every successfully committed command increments the global project `revision` by exactly 1.
-- Saving a project serializes the current revision into `manifest.json`.
-- Opening a project restores the revision; the history stack initializes empty.
-- Export render jobs capture `snapshotRevision` to ensure frame consistency.
-- Autosave snapshots persist the active revision; transient history stacks are not saved across disk reboots in V1.
+## 7. Revision and persistence
 
-## 8. Client Integration
+- Every successfully committed command increments the manifest `revision` by 1.
+- Saving a project writes the current revision to the manifest.
+- Loading a project restores the revision from the manifest; the history stack starts empty.
+- An export job stores `snapshotRevision`, the revision at the time the job starts.
 
-### Editor UI Integration
+### Relationship with autosave
+
+- Autosave writes the entire current state together with the revision.
+- The history stack is **not** persisted through autosave/load in the first version.
+  Persisting history is a later feature and requires inverse commands to be serialized.
+
+## 8. UI integration
 
 ```mermaid
 sequenceDiagram
-  participant U as UI Viewport
-  participant S as Application Service
+  participant U as UI Component
+  participant S as Service Layer
   participant CB as Command Bus
   participant PS as Project State
 
@@ -203,31 +249,41 @@ sequenceDiagram
   CB->>PS: handler.execute(command, state)
   PS-->>CB: { result, newState, inverse }
   CB-->>S: DispatchResult
-  S-->>U: State subscription notifies components → re-render
+  S-->>U: Updated state → re-render
 ```
 
-- UI components invoke the Application Service client rather than formatting raw commands.
-- `Ctrl+Z` and `Ctrl+Y` shortcuts dispatch `history.undo()` and `history.redo()`.
+- A UI component does not create a Command directly; it calls through the service layer.
+- The service layer creates the command with the correct type, payload, and baseRevision.
+- A state change causes the UI to re-render through a React state/context subscription.
+- Ctrl+Z / Ctrl+Y causes the service to call `history.undo()` / `history.redo()`.
 
-### MCP Integration
+## 9. MCP integration
 
-- MCP tool handlers invoke the identical Application Service endpoints.
-- Tool responses return `commandId` and new `revision` for agent verification.
-- Idempotency: re-dispatching with the same `commandId` returns the cached result without duplicate execution.
+- An MCP tool handler calls the same service layer as the UI.
+- Batch commands are especially useful for MCP because an agent commonly performs several
+  consecutive steps (create asset, import, mesh, rig) that need atomicity.
+- MCP returns `commandId` and `revision` so the agent can track progress.
+- Retry: the same `commandId` does not create a duplicate entity (idempotency check).
 
-## 9. Error Recovery Matrix
+## 10. Error handling
 
-| Error Condition | Resolution Strategy |
+| Error type | Handling |
 | --- | --- |
-| Validation Failure | Return user-facing error message; state remains unmutated |
-| Revision Conflict | Reject or merge depending on command type |
-| Handler Exception | Catch exception, log error, preserve existing state |
-| Batch Partial Failure | Roll back all prior commands in the batch in reverse order |
-| Inverse Failure | Critical error: log diagnostic state and trigger project recovery reload |
+| Validation failure | Return an error with a readable message; state remains unchanged |
+| Revision conflict | Reject or merge depending on the command type |
+| Handler exception | Catch, log, leave state unchanged, and return an internal error |
+| Partial batch failure | Roll back every command in the batch |
+| Inverse execution failure | Log the error; state may be inconsistent and requires recovery |
 
-## 10. Documentation References
+An inverse execution failure is the most serious case. The system must:
+- Log the complete original command and the inverse that failed.
+- Provide a recovery mechanism that reloads the project from the last save.
+- Never silently ignore the failure; the UI must notify the user.
 
-- [PLAN.md](PLAN.md) section 5 — Command Bus as core synchronization hub
-- [PROJECT_FORMAT.md](PROJECT_FORMAT.md) — Revision tracking in `manifest.json`
-- [MODULE_MAP.md](MODULE_MAP.md) — Ownership in `packages/application/`
-- [CODING_RULES.md](CODING_RULES.md) section 5 — Architectural boundaries
+## 11. References
+
+- [PLAN.md](PLAN.md) section 5 — the Command Bus is the central coordinator
+- [PROJECT_FORMAT.md](PROJECT_FORMAT.md) — revision in the manifest
+- [MODULE_MAP.md](MODULE_MAP.md) — `packages/application/src/commands/` and
+  `packages/application/src/history/`
+- [CODING_RULES.md](CODING_RULES.md) section 5 — module boundaries

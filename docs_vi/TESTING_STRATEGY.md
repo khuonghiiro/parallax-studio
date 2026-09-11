@@ -1,6 +1,7 @@
 # Chiến lược kiểm thử
 
-Trạng thái: đề xuất. Chưa có test suite chính thức ngoài quality gate đo dòng/file.
+Trạng thái: đề xuất. Hiện có quality gate cho giới hạn source và đồng bộ tài liệu;
+test suite sản phẩm chưa hoàn chỉnh.
 Tài liệu này đặt ra phân loại, chiến lược và tiêu chí cho từng loại test.
 
 ## 1. Phân loại test
@@ -247,18 +248,21 @@ Theo PLAN mục 7:
 
 1. **Source limits**: `node scripts/quality/check-source-limits.mjs`
    — Không file > 800 dòng, không dòng > 120 ký tự.
-2. **TypeScript strict**: `tsc -b --noEmit`
+2. **Documentation sync**: `node scripts/quality/check-doc-sync.mjs`
+   — Mọi tài liệu có đủ cặp, revision/hash hiện hành; tài liệu cần cho feature
+   phải được review ngữ nghĩa trước khi code.
+3. **TypeScript strict**: `tsc -b --noEmit`
    — Không lỗi type.
-3. **Unit + Integration tests**: `vitest run`
+4. **Unit + Integration tests**: `vitest run`
    — Tất cả pass.
-4. **Prettier check**: `prettier --check .`
+5. **Prettier check**: `prettier --check .`
    — Format đúng.
 
 ### Gate cảnh báo (advisory)
 
-5. **Import graph check**: Kiểm tra dependency boundaries theo module map.
-6. **Clone detection**: Phát hiện code trùng lặp.
-7. **Benchmark regression**: So sánh frame time với baseline.
+6. **Import graph check**: Kiểm tra dependency boundaries theo module map.
+7. **Clone detection**: Phát hiện code trùng lặp.
+8. **Benchmark regression**: So sánh frame time với baseline.
 
 ### Chưa triển khai trong lượt này
 

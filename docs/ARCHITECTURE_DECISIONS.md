@@ -1,260 +1,284 @@
 # Architecture Decision Records (ADR)
 
-This log records significant architectural decisions with context, decision rationale,
-and technical consequences in chronological order.
-Status values: `accepted`, `proposed`, `superseded by ADR-XXX`.
+Each significant decision is recorded using the following format: context, decision, and
+consequences. Entries are ordered chronologically. Status values are `accepted` (finalized),
+`proposed` (under consideration), and `superseded` (replaced by another ADR).
 
 ---
 
-## ADR-001: Pure 2D/2.5D Architecture Without Blender or Godot
+## ADR-001: 2D/2.5D architecture without Blender or Godot
 
 **Status:** accepted
 
 **Context:**
-Early concepts explored Blender as a rendering backend and Godot for viewport display.
-Both engines introduce heavy installer footprints, brittle IPC pipelines, and complex subprocess
-lifecycle management on consumer Windows and Linux machines.
+The first version was expected to use Blender as the render backend and Godot for the
+viewport. Both are powerful, but they require users to install large additional applications,
+create a complex pipeline, and make lifecycle management difficult on Windows and Linux.
 
 **Decision:**
-Adopt a pure 2D/2.5D architecture: planar textured layered meshes, 2D skeletal deformation,
-warp deformers, and depth camera projections. Zero runtime dependency on Blender, Godot,
-or external 3D engines.
+Move to a pure 2D/2.5D architecture: layered artwork, flat meshes, bones, deformers, and
+camera/light with depth. Do not depend on Blender, Godot, or any external 3D engine.
 
 **Consequences:**
-- The application owns its rendering pipeline entirely; zero external desktop dependencies.
-- Full 3D model authoring, 3D volumetric meshes, and fluid/cloth simulations are excluded.
-- Parallax and drop shadows are achieved via planar depth layering and camera projection.
-- Visuals are bounded by provided 2D artwork angles without true 3D volume.
+- The app owns its render pipeline, making it easier to package and distribute.
+- Complete 3D models, cloth/fluid simulation, and a full 3D viewport are not supported.
+- Parallax and shadows are achieved through depth layers and a camera, not true 3D geometry.
+- The result is limited to the viewpoints provided by the 2D asset; it has no real volume.
 
-**References:** [PLAN.md](PLAN.md) sections 1, 9.
+**References:** [PLAN.md](PLAN.md) sections 1 and 9.
 
 ---
 
-## ADR-002: Three.js with WebGL2 as the Single Authoritative Renderer
+## ADR-002: Three.js + WebGL2 as the only renderer
 
 **Status:** accepted
 
 **Context:**
-The engine requires skeletal skinning, layered materials (color + normal map + alpha),
-dynamic shadow maps, and flexible camera projections. Options: Three.js, PixiJS, custom WebGL engine.
+The renderer must support skinning, materials (color + normal map + alpha), shadows, and
+camera projection. Candidates were Three.js, PixiJS, and a custom renderer.
 
 **Decision:**
-Deploy Three.js with WebGL2 as the sole renderer for both interactive preview and offline video export.
-PixiJS and Three.js will not be hybridized.
+Use Three.js with WebGL2 as the only renderer for both preview and export.
+Do not combine PixiJS and Three.js in the first version.
 
 **Rationale:**
-- Three.js provides mature, battle-tested SkinnedMesh, MeshStandardMaterial, shadow mapping, and cameras.
-- Permissive MIT license with comprehensive documentation and active maintenance.
-- Hybridizing two renderers introduces excessive overhead in synchronizing poses, materials, picking, and shadow passes.
-- WebGPU will be evaluated once the WebGL2 pipeline reaches maturity.
+- Three.js already provides SkinnedMesh, MeshStandardMaterial, shadow maps, and cameras.
+- It uses the MIT license, has a large community, and has good documentation.
+- Combining two renderers creates synchronization costs for poses, materials, picking,
+  and shadows.
+- WebGPU will be evaluated after the WebGL2 pipeline is stable.
 
 **Consequences:**
-- All rendering logic resides under `packages/runtime/src/`.
-- Viewport preview and offline export share the identical Three.js scene graph.
-- Performance relies on WebGL2 capabilities.
+- All render logic lives in `packages/runtime/src/`.
+- Preview and export use the same Three.js scene graph.
+- Performance depends on WebGL2; consider WebGPU later if GPU compute is required.
 
-**References:** [PLAN.md](PLAN.md) sections 3, 4.
+**References:** [PLAN.md](PLAN.md) sections 3 and 4.
 
 ---
 
-## ADR-003: AI Image Generation via AI Client Tools and MCP Ingestion
+## ADR-003: AI image generation uses the client's tool, without installing a local model
 
 **Status:** accepted
 
 **Context:**
-The tool requires visual assets (characters, props, backgrounds). Options:
-(a) Bundle local Stable Diffusion / ComfyUI models.
-(b) Embed external cloud generation API keys in the app.
-(c) Utilize the AI client's built-in generation capabilities (Codex / Antigravity) and ingest via MCP.
+The app needs image assets (characters, backgrounds, and props). The options were:
+(a) install Stable Diffusion / ComfyUI locally, (b) call an external image-generation API
+with a separate API key, or (c) use the image-generation tool already available in the AI
+client (Codex/Antigravity).
 
 **Decision:**
-Option (c): The AI agent leverages the existing generation tools within its client environment,
-then ingests the resulting assets into the application via MCP tools. The application does not
-bundle models or manage external API keys.
+Choose option (c): an agent in Codex/Antigravity uses the client's available image-generation
+tool, then sends the result to the app through MCP. The app does not install a model and does
+not require a separate image-generation API key.
 
 **Rationale:**
-- Eliminates multi-gigabyte model downloads and local VRAM exhaustion during rigging.
-- Eliminates user API key configuration overhead.
-- Leverages the user's active AI subscription tier and image models.
-- The MCP server only implements asset validation and ingestion protocols.
+- Users do not need to install gigabyte-scale models on their machines.
+- Users do not need to configure an API key for an image service.
+- The workflow uses the limits and quality already available through the AI account.
+- MCP needs only image import and validation tools; it does not need to call a model.
 
 **Consequences:**
-- Relies on the AI client possessing active image generation capabilities.
-- Offline image generation without an active AI agent is not available.
-- Requires robust file transfer and upload handoff protocols between agent and desktop app.
+- The workflow depends on the AI client having an image-generation tool available.
+- Images cannot be generated offline without an AI client.
+- A file-transfer protocol between the client and app is required (local path or upload).
+- Image quality and style depend on the client's model.
 
-**References:** [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md), [PLAN.md](PLAN.md) section 5.
+**References:** [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md),
+[PLAN.md](PLAN.md) section 5.
 
 ---
 
-## ADR-004: TypeScript Owns Primary Business Logic, Rust for Measured Hot Paths
+## ADR-004: TypeScript owns the main logic; Rust is reserved for measured hot paths
 
 **Status:** accepted
 
 **Context:**
-The desktop shell runs on Tauri (Rust). Should rigging, timeline, and animation logic
-reside in TypeScript or Rust?
+The project uses Tauri (Rust) for the desktop shell. The question was whether rig, timeline,
+and animation logic should live in TypeScript or Rust.
 
 **Decision:**
-TypeScript owns all core business logic (rigging, animation, deformation, scene hierarchy, commands).
-Rust is reserved strictly for Tauri window management, native sidecar lifecycle, and measured hot paths.
+TypeScript owns all business logic (rig, animation, deformation, scene, and commands).
+Rust is used only for the Tauri shell, sidecar lifecycle, and hot paths with a clearly measured
+benefit.
 
 **Rationale:**
-- UI (React), MCP adapter (TypeScript SDK), and renderer (Three.js) all run in TypeScript.
-  Direct module imports avoid serialization overhead.
-- Maintains a single authoritative codebase and single test suite.
-- Rust/WASM migration occurs only when profiling reveals JS execution bottlenecks.
+- The UI (React), MCP (TypeScript SDK), and renderer (Three.js) all use TypeScript, so shared
+  logic in TypeScript can be imported directly without a bridge.
+- This maintains one implementation source and one test suite.
+- Move to Rust/WASM only when benchmarks show that JavaScript is the bottleneck.
 
 **Consequences:**
-- Rust does not maintain a second copy of rigging or timeline reducers.
-- Zero FFI serialization penalties for standard editing interactions.
-- Hot path optimization requires strict TypeScript contract interfaces.
+- Rust does not maintain a second rig/timeline implementation.
+- Every operation does not need to be serialized and deserialized through FFI.
+- A hot path, if needed, uses a WASM module with a TypeScript interface.
+- Measure before migrating; do not migrate preventively.
 
 **References:** [PLAN.md](PLAN.md) section 3.
 
 ---
 
-## ADR-005: Unified Single Renderer for Preview and Export
+## ADR-005: One renderer for preview and export
 
 **Status:** accepted
 
 **Context:**
-Interactive preview requires speed, whereas video export demands precision.
-Separate rendering engines could be built for each target.
+The preview renderer (fast, lossy) and export renderer (slow, accurate) could be separated.
 
 **Decision:**
-Use the identical Three.js renderer for interactive preview and headless export.
-Both execute the same pose evaluator, deformation pipeline, materials, and shadow passes.
+Use the same renderer (Three.js) for both preview and export, with the same pose evaluator,
+deformation pipeline, materials, and shadows.
 
 **Rationale:**
-- Eliminates "preview looks different from export" inconsistencies.
-- Eliminates duplicate shader and material implementations.
-- Preview downscales resolution and throttles frames, but evaluates identical math.
+- Avoid the common problem where the preview looks different from the export.
+- Reduce code duplication.
+- Preview may lower resolution or shadow quality while retaining the same logic.
 
 **Consequences:**
-- Export runs offline, rendering frame-by-frame and piping raw buffers to FFmpeg.
-- Viewport preview skips frames dynamically to preserve interactive framerates.
-- Contract tests enforce mathematical equivalence across both paths.
+- Export runs offline, renders each frame, and streams it to FFmpeg.
+- Preview may skip frames to maintain an interactive frame rate.
+- A contract test is required: the same time produces the same pose output.
 
-**References:** [PLAN.md](PLAN.md) section 6, [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 7.
+**References:** [PLAN.md](PLAN.md) section 6,
+[DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 7.
 
 ---
 
-## ADR-006: Do Not Hybridize PixiJS and Three.js
+## ADR-006: Do not combine PixiJS and Three.js
 
 **Status:** accepted
 
 **Context:**
-PixiJS excels at 2D sprite batching. Three.js is 3D-centric but supports 2D flat meshes.
-Hybrid setups often attempt to mix PixiJS for 2D sprites and Three.js for depth/lighting.
+PixiJS is strong at 2D sprite rendering. Three.js is strong at 3D but can also process 2D
+with flat meshes. One proposal was to use PixiJS for UI/sprites and Three.js for 3D effects.
 
 **Decision:**
-Standardize exclusively on Three.js. Do not introduce PixiJS into the dependency tree.
+Use only Three.js. Do not add PixiJS as a dependency.
 
 **Rationale:**
-- Hybridization requires dual-renderer synchronization: transform states, z-ordering, picking, event handling.
-- Dynamic shadow maps must illuminate the same geometry rendered to the screen.
-- Three.js textured planar meshes are sufficiently performant for 2D character puppetry.
+- Combining two renderers requires synchronization of pose state, z-order, picking, and event
+  handling.
+- The shadow pass would need to see the same mesh rendered by PixiJS, adding complexity.
+- Three.js handles textured flat 2D meshes well enough for this use case.
 
 **Consequences:**
-- Unified rendering architecture in Three.js.
-- Forfeits PixiJS automatic sprite batching; optimizations implemented directly in Three.js.
+- All render logic is consistent within Three.js.
+- PixiJS sprite-specific optimization (batch rendering) is not available.
+- If 2D sprite performance becomes a bottleneck, optimize it within Three.js first.
 
 **References:** [PLAN.md](PLAN.md) section 3.
 
 ---
 
-## ADR-007: Decouple Export Framerate from Preview Framerate
+## ADR-007: Export FPS is separate from preview FPS
 
 **Status:** accepted
 
 **Context:**
-Output specifications mandate 2K/4K at 60/120 FPS, but real-time viewports may drop frames
-at high resolutions on mid-range hardware.
+The required output is 60/120 FPS, but the viewport preview may not reach that frame rate
+at 4K.
 
 **Decision:**
-Decouple timeline authoring FPS, preview FPS, and export FPS into three distinct parameters.
-Export FPS strictly dictates the exact sample timestamps and total frame counts rendered.
+Separate three kinds of FPS: timeline FPS, preview FPS, and output FPS. Output FPS determines
+the video's frame count and timestamps independently of actual render speed.
 
 **Rationale:**
-- Offline 4K/120 FPS rendering may execute slower than real-time—this is expected and acceptable.
-- Viewport preview can downsample resolution or skip display frames without corrupting timeline curves.
-- Timeline FPS remains constant for authoring keyframes.
+- 4K/120 FPS may render slower than real time, which is expected.
+- Preview may run at a lower resolution and skip frames.
+- Timeline FPS is the authoring unit used to place keyframes.
 
 **Consequences:**
-- Exporter renders every discrete frame (`totalFrames = duration * outputFps`).
-- Never duplicate 60 FPS frames to fabricate 120 FPS exports.
-- Consistent sampling across both paths.
+- Export always samples every frame: `totalFrames = duration × outputFps`.
+- Do not duplicate 60 FPS frames and call the result 120 FPS.
+- Preview lowers quality but still uses the same pose evaluator.
 
 **References:** [RENDER_PROFILES.md](RENDER_PROFILES.md) section 2.
 
 ---
 
-## ADR-008: Mixamo-Style Auto-Rigging and Standardized 2D Mesh Topology
+## ADR-008: Mixamo-style Auto-Rig and standard mesh topology for 2D animation
 
 **Status:** accepted
 
 **Context:**
-Manual 2D character rigging (manual bone placement, pivot calibration, per-vertex weight painting)
-is tedious and time-consuming. Users require an automated Mixamo-like workflow: place key landmarks
-(chin, wrists, knees, ankles) to auto-generate the skeleton, bind pose, and weights.
-Furthermore, smooth 2D bending requires edge loops mirroring 3D modeling practices.
+Rigging a 2D character manually (placing every bone, adjusting pivots, and painting weights
+for every vertex) is very time-consuming. Users need a workflow as fast as Mixamo in 3D:
+after marking only key positions (chin, wrists, knees, ankles, and so on), the app automatically
+generates the complete skeleton, bind pose, and auto-weights. At the same time, smooth bending
+in 2D deformation requires a standard mesh topology similar to edge loops in 3D.
 
 **Decision:**
-1. Implement a 2D Auto-Rig system driven by landmark detection and Rig-Ready Image Templates.
-2. Standardize pipeline: Landmarks → Auto-Skeleton → Proximity Auto-Weights with layer boundary masking.
-3. Enforce Mesh Topology standards: require ≥1–2 edge loops at bending joints (elbows, knees, shoulders, hips)
-   and vertex rings around facial features (eyes, mouth).
-4. Provide reusable animation templates (walk, run, idle, talk) with automated skeleton retargeting.
+1. Implement a 2D Auto-Rig system based on Landmark Detection and Rig-Ready Image Templates.
+2. Standardize the pipeline: Landmarks → Auto-skeleton → Auto-weights (inverse distance
+   combined with layer bounds).
+3. Establish a Mesh Topology standard: require ≥1-2 edge loops around bending joints
+   (elbows, knees, shoulders, and hips) and vertex rings around the eyes and mouth.
+4. Provide sample Animation Templates (walk, run, idle, gesture) that automatically retarget
+   to the generated skeleton.
 
 **Rationale:**
-- Accelerates asset preparation from hours to under 30 seconds.
-- Enables autonomous AI agents to import characters, rig skeletons, and assign motions via MCP without manual clicking.
-- Eliminates mesh pinching, volume collapse, and joint gaps during extreme limb bends.
+- Reduce the time required to create a movable character from hours to approximately 30 seconds.
+- Allow an AI agent through MCP to generate an asset, attach a rig, and assign sample motion
+  automatically without manual intervention.
+- Prevent creasing, mesh distortion, or open joints during large-angle deformation.
 
 **Consequences:**
-- Requires contour extraction, interior vertex scattering, and edge loop insertion algorithms in `packages/core/src/geometry/`.
-- Requires standard Rig-Ready Templates (T-pose, A-pose) in character prompt engineering.
+- Contour extraction, interior vertex insertion, and edge-loop generation algorithms are
+  required in `packages/core/src/geometry/`.
+- A Rig-Ready Templates library is required to standardize proportions and poses
+  (T-pose and A-pose).
+- AI source images must follow the layout needed for the landmark algorithm to identify
+  positions as accurately as possible.
 
 **References:** [AUTO_RIG.md](AUTO_RIG.md), [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md).
 
 ---
 
-## ADR-009: Dual-Mode UI (Setup / Animate), Command Bus & Unified Icon System
+## ADR-009: Two-mode UI architecture (Setup / Animate), Command Bus, and standard icon system
 
 **Status:** accepted
 
 **Context:**
-2D animation software encompasses vast functional surfaces (mesh vertex editing, bone rigging,
-weight painting, timeline sequencing, dopesheet, curves, scene staging, lighting).
-Cluttering these into a single screen causes cognitive overload. Furthermore, AI via MCP and
-users via UI must mutate identical states. Finally, OS-native icons cause fragmented visual styles.
+2D/2.5D animation filmmaking software has a very large toolset (mesh drawing, bone creation,
+weight painting, keyframe timeline, dopesheet, graph editor, scene layout, and camera/lighting).
+Putting everything on one screen would clutter the interface and make it difficult to use.
+In addition, AI through MCP and users through the UI need to control the same state. Finally,
+system icons on Windows/macOS/Linux fragment the interface and are inconsistent across platforms.
 
 **Decision:**
-1. Divide UI into two primary workspaces (inspired by Spine, Live2D, Rive, Moho):
-   - **Setup Mode**: Dedicated to asset import, layer setup, mesh generation, landmark tuning, bone rigging, weight painting.
-   - **Animate Mode**: Dedicated to timeline playback, dopesheet, curve editor, scene props, cameras, lights, and shot sequencing.
-2. All UI interactions dispatch through the Application Command Bus—identical to MCP agent tools.
+1. Divide the UI into two core working modes, based on Spine, Live2D, Rive, and Moho:
+   - **Setup Mode**: Dedicated to asset creation, layer editing, mesh generation, landmark
+     placement, bone rigging, weight painting, and test poses.
+   - **Animate Mode**: Dedicated to timeline animation, dopesheet, curves/graph, props,
+     camera, lights, and shot preview.
+2. Every UI operation (button click, vertex drag, bone rotation, or keyframe placement) emits
+   a command through the Command Bus and corresponds exactly to the AI's MCP tools.
 3. Standardize the Icon System:
-   - Primary: Open-source Lucide Icons (stroke outline 24×24, `currentColor`, ISC license).
-   - Fallback: Custom inline SVGs conforming strictly to the 24×24 stroke outline specification.
-   - Never use OS-native icons (Segoe MDL2 / SF Symbols) or emojis.
+   - Priority 1: Use the open-source Lucide Icons library (24×24 outline strokes,
+     `currentColor`, ISC license).
+   - Priority 2: For specialized 2D animation tools missing from the library, AI generates an
+     inline SVG that follows the geometric specification (viewBox 0 0 24 24, stroke-width 2,
+     no font or raster content).
+   - Never use native operating-system icons or emoji.
 
 **Rationale:**
-- Clear, uncluttered user experience tailored to the specific phase of character production.
-- 100% synchronization between user actions and AI agent mutations via Command Bus.
-- Cross-platform visual consistency across Windows, Linux, and Web without OS font dependencies.
+- The interface remains intuitive and clear without being overloaded by tools unrelated to the
+  current stage of work.
+- User operations (UI) and AI operations (MCP) are completely synchronized through the
+  Command Bus.
+- Display is 100% consistent across Windows, Linux, and the Web without relying on system fonts.
 
 **Consequences:**
-- Requires a workspace mode switcher in `apps/editor/`.
-- Every interactive UI component maps 1-to-1 to an Application Command.
-- Centralized icon registry under `apps/editor/src/ui/icons/`.
+- A state switcher between Setup Mode and Animate Mode must be implemented in `apps/editor/`.
+- Every UI component must map one-to-one to an Application Command.
+- The icon set is managed centrally in `apps/editor/src/ui/icons/`.
 
-**References:** [UI_SPECIFICATION.md](UI_SPECIFICATION.md), [COMMAND_BUS.md](COMMAND_BUS.md), [MCP_TOOLS.md](MCP_TOOLS.md).
+**References:** [UI_SPECIFICATION.md](UI_SPECIFICATION.md),
+[COMMAND_BUS.md](COMMAND_BUS.md), [MCP_TOOLS.md](MCP_TOOLS.md).
 
 ---
 
-## ADR Template
+## Template for a new ADR
 
 ```markdown
 ## ADR-NNN: [Title]
@@ -262,16 +286,16 @@ users via UI must mutate identical states. Finally, OS-native icons cause fragme
 **Status:** proposed | accepted | superseded by ADR-XXX
 
 **Context:**
-[Problem statement and examined alternatives.]
+[The problem to solve and the alternatives.]
 
 **Decision:**
-[Chosen architectural path.]
+[The selected option.]
 
 **Rationale:**
-[Justification for the decision.]
+[Why this option was selected.]
 
 **Consequences:**
-[Positive and negative technical trade-offs.]
+[Positive and negative effects.]
 
-**References:** [Relevant documentation links.]
+**References:** [Links to related documentation.]
 ```

@@ -71,7 +71,8 @@ packages/
     export/                 Frame rendering dùng cùng runtime
   image-handoff/src/        Reference, file/upload và kiểm tra artifact AI đã tạo
 scripts/quality/            Gate nhỏ, độc lập và đọc được
-docs/                       Kế hoạch, quy tắc, quyết định kiến trúc
+docs_vi/                    Đặc tả tiếng Việt gốc do người dùng review
+docs/                       Bản dịch tiếng Anh từ docs_vi để AI đọc
 ```
 
 ## Quyền sở hữu và phụ thuộc
