@@ -37,7 +37,7 @@ algorithms.
 
 Owns geometry, contours, triangulation, rig hierarchy, bind pose, weights, IK,
 view selection, animation sampling, deformation, camera/light behavior, and the
-Three.js runtime. It does not create competing application commands or schemas.
+Three.js runtime. It does not create competing `application` commands or `contracts` schemas.
 
 ### `editor-ux`
 
@@ -133,7 +133,7 @@ feedback, runs integrated verification, and only then reports completion.
 
 Each source area may have a short `AGENTS.md` that describes its responsibility,
 allowed dependencies, invariants, and local verification. Before editing a file,
-read the root instructions and the nearest `AGENTS.md` that owns the target.
+read the root `AGENTS.md` and the nearest `AGENTS.md` that owns the target.
 
 Do not copy the root file, skill, or architecture documents into scoped files.
 When a target module under `apps/` or `packages/` does not exist, do not create

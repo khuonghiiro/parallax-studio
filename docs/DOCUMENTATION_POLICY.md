@@ -47,7 +47,7 @@ Hashes detect changed files. A bilingual reviewer must still verify semantic
 equivalence before changing a pair to `synced`.
 
 Before implementing a feature, every document required by that feature must be
-`synced`. Unrelated documentation that still needs review does not block an
+`synced`. Unrelated documentation still at `needs-review` does not block an
 independent task.
 
 ## 4. Verification
