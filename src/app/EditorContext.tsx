@@ -4,7 +4,9 @@ import {
   CommandRegistry,
   ProjectState,
   registerDefaultHandlers,
+  reconstructSnapshot,
   type ProjectSnapshot,
+  type SerializableSnapshot,
 } from '@parallax/application';
 import type { CommandPayload, CommandResult } from '@parallax/contracts';
 import type { EditorMode } from './layout/MenuBar.js';
@@ -26,6 +28,7 @@ export interface EditorContextValue {
   setIsPlaying: (playing: boolean) => void;
   fps: number;
   setFps: (fps: number) => void;
+  isRemoteConnected: boolean;
   dispatch: (payload: CommandPayload) => Promise<CommandResult>;
   importImageFile: (file: File) => Promise<string | undefined>;
   loadDemoCharacter: () => Promise<string | undefined>;
@@ -53,16 +56,19 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [currentFrame, setCurrentFrame] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [fps, setFps] = useState<number>(60);
+  const [isRemoteConnected, setIsRemoteConnected] = useState<boolean>(false);
 
-  // Initialize command handlers & default project
+  // Initialize local command handlers & fallback project
   useEffect(() => {
     registerDefaultHandlers(commandBus, commandRegistry, projectState);
 
     const unsubscribe = projectState.subscribe((snap) => {
-      setSnapshot(snap);
+      // Only use local state if remote service is not connected
+      if (!isRemoteConnected) {
+        setSnapshot(snap);
+      }
     });
 
-    // Create initial project only if not already loaded
     if (!projectState.isLoaded) {
       commandBus.dispatch({
         type: 'create_project',
@@ -74,13 +80,65 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => {
       unsubscribe();
     };
-  }, [commandBus, commandRegistry, projectState]);
+  }, [commandBus, commandRegistry, projectState, isRemoteConnected]);
+
+  // Connect to authoritative local Application Service via SSE
+  useEffect(() => {
+    let sse: EventSource | null = null;
+    try {
+      sse = new EventSource('/api/events');
+
+      sse.onopen = () => {
+        setIsRemoteConnected(true);
+      };
+
+      sse.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data) as {
+            type: string;
+            snapshot?: SerializableSnapshot;
+          };
+          if (parsed.snapshot) {
+            const reconstructed = reconstructSnapshot(parsed.snapshot);
+            setSnapshot(reconstructed);
+            setIsRemoteConnected(true);
+          }
+        } catch {
+          // Ignore parse errors on ping
+        }
+      };
+
+      sse.onerror = () => {
+        setIsRemoteConnected(false);
+      };
+    } catch {
+      setIsRemoteConnected(false);
+    }
+
+    return () => {
+      sse?.close();
+    };
+  }, []);
 
   const dispatch = useCallback(
     async (payload: CommandPayload): Promise<CommandResult> => {
+      if (isRemoteConnected) {
+        try {
+          const res = await fetch('/api/commands', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) {
+            return (await res.json()) as CommandResult;
+          }
+        } catch {
+          // Fall back to local command bus if fetch fails
+        }
+      }
       return commandBus.dispatch(payload);
     },
-    [commandBus],
+    [commandBus, isRemoteConnected],
   );
 
   // Import image file from user's computer
@@ -233,6 +291,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setIsPlaying,
       fps,
       setFps,
+      isRemoteConnected,
       dispatch,
       importImageFile,
       loadDemoCharacter,
@@ -248,6 +307,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       currentFrame,
       isPlaying,
       fps,
+      isRemoteConnected,
       dispatch,
       importImageFile,
       loadDemoCharacter,

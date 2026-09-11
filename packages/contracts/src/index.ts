@@ -170,3 +170,15 @@ export type {
   StagingRequest,
 } from './director/director-schema.js';
 
+// Session domain
+export {
+  SessionConnectionStatusSchema,
+  SessionInfoSchema,
+  StateSyncEventSchema,
+} from './session/session-info.js';
+export type {
+  SessionConnectionStatus,
+  SessionInfo,
+  StateSyncEvent,
+} from './session/session-info.js';
+

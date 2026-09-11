@@ -49,3 +49,19 @@ export type {
   EncoderProgressCallback,
 } from './ports/encoder-port.js';
 
+// Application Service & Sync
+export {
+  ApplicationService,
+  getApplicationService,
+  resetApplicationService,
+} from './service/application-service.js';
+export type { SerializableSnapshot } from './service/application-service.js';
+export type {
+  HttpServiceOptions,
+  HttpServiceInstance,
+} from './service/http-server.js';
+export {
+  ApplicationServiceClient,
+  reconstructSnapshot,
+} from './service/service-client.js';
+

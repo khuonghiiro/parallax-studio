@@ -167,10 +167,82 @@ async function runIntegrationTest(): Promise<void> {
   const exportData = JSON.parse(exportRes.content[0].text);
   console.log('9. director_export_scene result:', exportData.status, 'profile:', exportData.profile);
 
-  console.log('--- All 12 MCP Tools & AI Director Integration Tests Passed Successfully! ---');
+  // 2.10 rig_get_info
+  const rigInfoRes = await callToolHandler({
+    method: 'tools/call',
+    params: {
+      name: 'rig_get_info',
+      arguments: { assetId },
+    },
+  });
+  const rigInfoData = JSON.parse(rigInfoRes.content[0].text);
+  console.log('10. rig_get_info result:', rigInfoData.hasRig, 'bones:', rigInfoData.boneCount);
+  if (!rigInfoData.hasRig || rigInfoData.boneCount < 10) {
+    throw new Error('rig_get_info verification failed');
+  }
+
+  // 2.11 rig_set_morph
+  const morphRes = await callToolHandler({
+    method: 'tools/call',
+    params: {
+      name: 'rig_set_morph',
+      arguments: { assetId, name: 'smile', weight: 0.8 },
+    },
+  });
+  const morphData = JSON.parse(morphRes.content[0].text);
+  console.log('11. rig_set_morph result:', morphData.status);
+  if (morphData.status !== 'success') {
+    throw new Error('rig_set_morph verification failed');
+  }
+
+  // 2.12 scene_add_instance
+  const instanceRes = await callToolHandler({
+    method: 'tools/call',
+    params: {
+      name: 'scene_add_instance',
+      arguments: {
+        assetId,
+        name: 'Hero In Castle',
+        x: 100,
+        y: -50,
+        z: 250,
+        scale: 1.2,
+      },
+    },
+  });
+  const instanceData = JSON.parse(instanceRes.content[0].text);
+  console.log('12. scene_add_instance result:', instanceData.status, 'id:', instanceData.entityId);
+  if (instanceData.status !== 'success') {
+    throw new Error('scene_add_instance verification failed');
+  }
+
+  // 2.13 scene_set_camera
+  const cameraRes = await callToolHandler({
+    method: 'tools/call',
+    params: {
+      name: 'scene_set_camera',
+      arguments: {
+        x: 50,
+        y: 0,
+        z: 1200,
+        zoom: 1.1,
+      },
+    },
+  });
+  const cameraData = JSON.parse(cameraRes.content[0].text);
+  console.log('13. scene_set_camera result:', cameraData.status);
+  if (cameraData.status !== 'success') {
+    throw new Error('scene_set_camera verification failed');
+  }
+
+  console.log('--- All 16 MCP Tools & AI Director Integration Tests Passed Successfully! ---');
 }
 
-runIntegrationTest().catch((err) => {
-  console.error('MCP Integration Test Failed:', err);
-  process.exit(1);
-});
+runIntegrationTest()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error('MCP Integration Test Failed:', err);
+    process.exit(1);
+  });

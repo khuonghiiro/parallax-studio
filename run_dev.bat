@@ -7,15 +7,15 @@ echo.
 echo Đang mở trình duyệt tại địa chỉ: http://localhost:5173
 start "" "http://localhost:5173"
 echo.
-echo Đang khởi động Vite Dev Server...
-echo (Nhấn Ctrl+C để dừng máy chủ)
+echo Đang khởi động Parallax Unified System (Application Service + UI)...
+echo (Nhấn Ctrl+C để dừng toàn bộ hệ thống)
 echo.
 
 where pnpm >nul 2>nul
 if %errorlevel% equ 0 (
-    call pnpm dev
+    call pnpm start
 ) else (
-    call npm.cmd run dev
+    call npm.cmd run start
 )
 
 pause

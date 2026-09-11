@@ -7,6 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "start": "node scripts/start.mjs",
+    "service": "tsx service/bootstrap.ts",
     "engine": "cargo run --manifest-path engine/Cargo.toml -- --workspace ./workspace --web ./dist",
     "mcp": "tsx mcp/server.ts",
     "test": "vitest run",

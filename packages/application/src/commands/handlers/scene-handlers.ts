@@ -170,10 +170,11 @@ export function handleSetCamera(
     return { status: 'not_found', error: 'No project is loaded' };
   }
 
-  const cameraUpdates = payload.data.camera as Partial<Camera>;
-  if (!cameraUpdates) {
+  const rawCamera = (payload.data.camera as Partial<Camera>) || (payload.data as Partial<Camera>);
+  if (!rawCamera || (!rawCamera.position && !rawCamera.zoom && !rawCamera.fov && !payload.data.camera)) {
     return { status: 'validation_error', error: 'camera data is required for set_camera' };
   }
+  const cameraUpdates = (payload.data.camera as Partial<Camera>) || rawCamera;
 
   const sceneId = payload.data.sceneId as string | undefined;
   const scene = getOrCreateScene(state, sceneId);

@@ -6,10 +6,11 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import {
   CommandBus,
-  CommandRegistry,
   ProjectState,
-  registerDefaultHandlers,
+  ApplicationService,
+  getApplicationService,
 } from '@parallax/application';
+import { startApplicationService } from '../packages/application/src/service/http-server.js';
 import {
   handleDirectorParseScript,
   handleDirectorStageScene,
@@ -17,27 +18,34 @@ import {
   handleDirectorExportScene,
 } from './director-tools.js';
 
+export interface McpServerOptions {
+  service?: ApplicationService;
+  autoStartHttp?: boolean;
+  port?: number;
+}
+
 /**
  * Parallax Studio MCP Server.
  * Exposes core animation, rigging, and project pipeline tools to AI agents.
  */
-export function createMcpServer(): {
+export function createMcpServer(options: McpServerOptions = {}): {
   server: Server;
   bus: CommandBus;
   state: ProjectState;
+  service: ApplicationService;
 } {
-  const bus = new CommandBus();
-  const registry = new CommandRegistry();
-  const state = new ProjectState();
+  const service = options.service ?? getApplicationService();
+  const bus = service.commandBus;
+  const state = service.projectState;
 
-  registerDefaultHandlers(bus, registry, state);
-
-  // Initialize a default project
-  bus.dispatch({
-    type: 'create_project',
-    domain: 'project',
-    data: { name: 'MCP Default Project' },
-  });
+  if (options.autoStartHttp !== false) {
+    startApplicationService({
+      port: options.port ?? 3100,
+      service,
+    }).catch(() => {
+      // Ignore if port 3100 is already bound by existing service process
+    });
+  }
 
   const server = new Server(
     {
@@ -188,6 +196,61 @@ export function createMcpServer(): {
             },
           },
         },
+        {
+          name: 'rig_get_info',
+          description: 'Inspect bone hierarchy, landmarks, and morph targets for an asset',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              assetId: { type: 'string', description: 'Target asset entity ID' },
+            },
+            required: ['assetId'],
+          },
+        },
+        {
+          name: 'rig_set_morph',
+          description: 'Set blend weight for facial morph target (smile, blink, mouth, etc.)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              assetId: { type: 'string', description: 'Target asset entity ID' },
+              name: { type: 'string', description: 'Morph target name' },
+              weight: { type: 'number', description: 'Blend weight from 0.0 to 1.0' },
+            },
+            required: ['assetId', 'name', 'weight'],
+          },
+        },
+        {
+          name: 'scene_add_instance',
+          description: 'Stage an asset instance into the 2.5D scene with position, depth, and view angle',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              assetId: { type: 'string', description: 'Asset ID to stage' },
+              name: { type: 'string', description: 'Instance label' },
+              x: { type: 'number', description: 'X position in world units' },
+              y: { type: 'number', description: 'Y position in world units' },
+              z: { type: 'number', description: 'Z depth for parallax sorting' },
+              scale: { type: 'number', description: 'Uniform scale multiplier' },
+              viewAngle: { type: 'string', description: 'Active view angle' },
+            },
+            required: ['assetId'],
+          },
+        },
+        {
+          name: 'scene_set_camera',
+          description: 'Configure 2.5D perspective/orthographic camera framing, position, and zoom',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              x: { type: 'number', description: 'Camera X position' },
+              y: { type: 'number', description: 'Camera Y position' },
+              z: { type: 'number', description: 'Camera Z depth distance' },
+              zoom: { type: 'number', description: 'Camera zoom factor' },
+              fov: { type: 'number', description: 'Field of view in degrees' },
+            },
+          },
+        },
       ],
     };
   });
@@ -328,6 +391,98 @@ export function createMcpServer(): {
 
       case 'director_export_scene':
         return handleDirectorExportScene(state, args);
+
+      case 'rig_get_info': {
+        const assetId = args.assetId as string;
+        const asset = state.getAssetData(assetId);
+        if (!asset) {
+          return {
+            isError: true,
+            content: [{ type: 'text', text: `Asset ${assetId} not found` }],
+          };
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  assetId,
+                  hasRig: Boolean(asset.skeleton),
+                  boneCount: asset.skeleton?.bones.length ?? 0,
+                  bones: asset.skeleton?.bones ?? [],
+                  weightsCount: asset.weights?.length ?? 0,
+                  morphTargets: asset.morphTargets ?? [],
+                  activeView: asset.viewSet?.activeView ?? 'front',
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+
+      case 'rig_set_morph': {
+        const res = await bus.dispatch({
+          type: 'set_morph_weight',
+          domain: 'rig',
+          targetId: args.assetId as string,
+          data: {
+            assetId: args.assetId as string,
+            name: args.name as string,
+            weight: Number(args.weight),
+          },
+        });
+        return {
+          content: [{ type: 'text', text: JSON.stringify(res, null, 2) }],
+        };
+      }
+
+      case 'scene_add_instance': {
+        const res = await bus.dispatch({
+          type: 'add_instance',
+          domain: 'scene',
+          data: {
+            assetId: args.assetId as string,
+            name: (args.name as string) || 'Character Instance',
+            position: {
+              x: Number(args.x ?? 0),
+              y: Number(args.y ?? 0),
+              z: Number(args.z ?? 0),
+            },
+            scale: {
+              x: Number(args.scale ?? 1),
+              y: Number(args.scale ?? 1),
+            },
+            viewAngle: args.viewAngle as string,
+          },
+        });
+        return {
+          content: [{ type: 'text', text: JSON.stringify(res, null, 2) }],
+        };
+      }
+
+      case 'scene_set_camera': {
+        const res = await bus.dispatch({
+          type: 'set_camera',
+          domain: 'scene',
+          data: {
+            camera: {
+              position: {
+                x: Number(args.x ?? 0),
+                y: Number(args.y ?? 0),
+                z: Number(args.z ?? 1000),
+              },
+              zoom: Number(args.zoom ?? 1),
+              fov: Number(args.fov ?? 45),
+            },
+          },
+        });
+        return {
+          content: [{ type: 'text', text: JSON.stringify(res, null, 2) }],
+        };
+      }
 
       default:
         throw new Error(`Unknown tool: ${name}`);
