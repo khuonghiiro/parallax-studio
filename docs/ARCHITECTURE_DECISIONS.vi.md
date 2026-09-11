@@ -194,6 +194,72 @@ frame count và timestamp của video, không phụ thuộc tốc độ render t
 
 ---
 
+## ADR-008: Auto-Rig Mixamo-style và Mesh Topology chuẩn cho 2D Animation
+
+**Trạng thái:** accepted
+
+**Bối cảnh:**
+Rigging nhân vật 2D thủ công (đặt từng xương, chỉnh pivot, vẽ trọng số cho từng vertex)
+rất tốn thời gian. Người dùng cần cơ chế nhanh như Mixamo trong 3D: chỉ cần đánh dấu
+các vị trí then chốt (chin, wrists, knees, ankles...) là app tự sinh toàn bộ skeleton,
+bind pose và auto-weights. Đồng thời, biến dạng 2D uốn cong mượt mà đòi hỏi mesh
+phải có topology chuẩn tương tự edge loops trong 3D.
+
+**Quyết định:**
+1. Triển khai hệ thống Auto-Rig 2D dựa trên Landmark Detection và Rig-Ready Image Templates.
+2. Chuẩn hóa quy trình: Landmarks → Auto-skeleton → Auto-weights (khoảng cách nghịch đảo kết hợp layer bounds).
+3. Đặt quy chuẩn Mesh Topology: bắt buộc ≥1-2 edge loops quanh các khớp uốn cong (khuỷu, gối, vai, hông) và vertex rings quanh mắt/miệng.
+4. Cung cấp bộ Animation Templates mẫu (walk, run, idle, gesture) tự động retarget vào skeleton đã sinh.
+
+**Lý do:**
+- Giảm thời gian tạo nhân vật có thể cử động từ hàng giờ xuống ~30 giây.
+- Cho phép AI agent qua MCP tự động sinh asset, gắn rig và gán chuyển động mẫu mà không cần can thiệp thủ công.
+- Ngăn ngừa hiện tượng gãy nếp, méo mesh hoặc hở khớp khi biến dạng góc lớn.
+
+**Hệ quả:**
+- Cần thuật toán trích xuất contour, thêm vertex nội bộ và tạo edge loops trong `packages/core/src/geometry/`.
+- Cần thư viện Rig-Ready Templates chuẩn hóa tỷ lệ và tư thế (T-pose, A-pose).
+- Ảnh nguồn từ AI cần tuân thủ bố cục để thuật toán landmark nhận diện chính xác nhất.
+
+**Tham chiếu:** [AUTO_RIG.vi.md](AUTO_RIG.vi.md), [IMAGE_WORKFLOW.vi.md](IMAGE_WORKFLOW.vi.md).
+
+---
+
+## ADR-009: Kiến trúc UI 2 chế độ (Setup / Animate), Command Bus và Hệ thống Icon chuẩn
+
+**Trạng thái:** accepted
+
+**Bối cảnh:**
+Phần mềm làm phim hoạt hình 2D/2.5D có khối lượng công cụ rất lớn (vẽ mesh, tạo xương,
+weight paint, keyframe timeline, dopesheet, graph editor, scene layout, camera/lighting).
+Nếu dồn vào một màn hình sẽ gây rối loạn giao diện và khó thao tác. Ngoài ra, AI qua MCP
+và người dùng qua UI cần điều khiển chung một trạng thái. Cuối cùng, icon hệ thống (Windows/macOS/Linux)
+gây phân mảnh giao diện và không đồng bộ cross-platform.
+
+**Quyết định:**
+1. Tách UI thành 2 chế độ làm việc cốt lõi (học hỏi từ Spine, Live2D, Rive, Moho):
+   - **Setup Mode**: Dành riêng cho tạo asset, chỉnh layer, sinh mesh, đặt landmarks, gắn xương, vẽ weights, test pose.
+   - **Animate Mode**: Dành riêng cho diễn hoạt timeline, dopesheet, curves/graph, đạo cụ, camera, ánh sáng và preview shot.
+2. Tất cả thao tác UI (click button, kéo vertex, xoay bone, đặt keyframe) đều phát command qua Command Bus — hoàn toàn khớp với MCP tools của AI.
+3. Chuẩn hóa Hệ thống Icon:
+   - Ưu tiên 1: Dùng thư viện mã nguồn mở Lucide Icons (stroke outline 24×24, `currentColor`, ISC license).
+   - Ưu tiên 2: Với công cụ đặc thù 2D animation mà thư viện thiếu, AI tự sinh SVG inline theo đúng spec hình học (viewBox 0 0 24 24, stroke-width 2, không dùng font/raster).
+   - Tuyệt đối không dùng icon hệ điều hành native hoặc emoji.
+
+**Lý do:**
+- Giao diện trực quan, rõ ràng, không bị quá tải công cụ không liên quan đến giai đoạn làm việc.
+- Đồng bộ tuyệt đối giữa thao tác của User (UI) và thao tác của AI (MCP) qua Command Bus.
+- Đồng bộ hiển thị 100% trên cả Windows, Linux và Web mà không phụ thuộc font hệ thống.
+
+**Hệ quả:**
+- Cần triển khai state switcher giữa Setup Mode và Animate Mode trong `apps/editor/`.
+- Mọi UI component phải map 1-1 với Application Command.
+- Bộ icon được quản lý tập trung trong `apps/editor/src/ui/icons/`.
+
+**Tham chiếu:** [UI_SPECIFICATION.vi.md](UI_SPECIFICATION.vi.md), [COMMAND_BUS.vi.md](COMMAND_BUS.vi.md), [MCP_TOOLS.vi.md](MCP_TOOLS.vi.md).
+
+---
+
 ## Template cho ADR mới
 
 ```markdown

@@ -12,8 +12,9 @@ trong source; tài liệu này đặt ra hướng và ràng buộc để chốt 
     <asset-id>/
       source/              Ảnh gốc (PNG, PSD layers), normal map, mask
       views/               Ảnh/layer theo từng góc nhìn
+      landmarks.json       Tọa độ các điểm khớp (chin, wrist, knee...) cho auto-rig
       rig.json             Bone hierarchy, weights, bindings
-      mesh.json            Contour, triangulation, UV
+      mesh.json            Contour, triangulation, UV, edge loops
       material.json        Tint, normal map ref, roughness
       meta.json            Tên, tag, nguồn gốc (AI brief, reference hash)
   scenes/
@@ -148,6 +149,31 @@ Invariant:
 - Mỗi vertex có tối đa 4 bone influence; weights chuẩn hóa tổng = 1.0.
 - Rest pose là trạng thái khi chưa áp animation; lưu riêng cho mỗi view.
 
+### Landmarks
+
+Dùng cho quy trình Auto-Rig (Mixamo-style, xem [AUTO_RIG.vi.md](AUTO_RIG.vi.md)):
+
+```jsonc
+{
+  "templateId": "humanoid-v1",
+  "status": "confirmed",            // estimated | confirmed | manual
+  "points": {
+    "chin": { "x": 512, "y": 280 },
+    "neck": { "x": 512, "y": 320 },
+    "left_shoulder": { "x": 420, "y": 360 },
+    "right_shoulder": { "x": 604, "y": 360 },
+    "left_elbow": { "x": 360, "y": 480 },
+    "right_elbow": { "x": 664, "y": 480 },
+    "left_wrist": { "x": 310, "y": 600 },
+    "right_wrist": { "x": 714, "y": 600 },
+    "left_knee": { "x": 460, "y": 750 },
+    "right_knee": { "x": 564, "y": 750 },
+    "left_ankle": { "x": 450, "y": 920 },
+    "right_ankle": { "x": 574, "y": 920 }
+  }
+}
+```
+
 ### Mesh
 
 ```jsonc
@@ -156,6 +182,7 @@ Invariant:
   "vertices": [/* tọa độ sau triangulation */],
   "indices": [/* tam giác */],
   "uvs": [/* UV tương ứng vertices */],
+  "edgeLoops": [/* mảng danh sách vertex index tạo thành vòng quanh khớp */],
   "topology": "earcut-v1"          // Đánh dấu phương pháp triangulation
 }
 ```
@@ -271,3 +298,5 @@ ba loại FPS và cách lấy mẫu.
 - [COMMAND_BUS.vi.md](COMMAND_BUS.vi.md) — cách revision và undo tương tác với lưu project
 - [MODULE_MAP.vi.md](MODULE_MAP.vi.md) — `packages/contracts/src/` sở hữu schema,
   `apps/service/src/adapters/persistence/` sở hữu I/O
+- [AUTO_RIG.vi.md](AUTO_RIG.vi.md) — chi tiết landmarks và auto-rig format
+- [UI_SPECIFICATION.vi.md](UI_SPECIFICATION.vi.md) — tương tác UI với cấu trúc project

@@ -110,7 +110,7 @@ Chi tiết cơ chế auto-rig và Rig-Ready Template: [AUTO_RIG.vi.md](AUTO_RIG.
 | `animation.apply_template` | write | Áp template lên skeleton hiện tại |
 | `animation.adjust_template` | write | Sửa keyframes của template đã áp |
 
-Animation templates và retarget: [AUTO_RIG.vi.md](AUTO_RIG.vi.md) mục 5.
+Animation templates và retarget: [AUTO_RIG.vi.md](AUTO_RIG.vi.md) mục 6.
 
 
 ### 3.6 Scene

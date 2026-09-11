@@ -21,7 +21,7 @@ apps/
       transport/            HTTP, parse lỗi, timeout
       session/              Session client có ownership rõ
       project/              Adapter gọi application service
-    ui/                     Button, dialog, field thuần dùng chung
+    ui/                     Button, dialog, field, icon catalog (Lucide + custom SVG)
   service/src/
     http/                   Route mỏng
     adapters/
@@ -37,7 +37,7 @@ apps/
 packages/
   contracts/src/
     asset/                  Layer, material, view schema
-    rig/                    Bone, binding, pose schema
+    rig/                    Bone, binding, pose, landmark, rig template schema
     animation/              Track, clip, keyframe schema
     scene/                  Instance, camera, light, shot schema
     commands/               Command payload và result
@@ -48,7 +48,7 @@ packages/
   core/src/
     geometry/               Contour extraction, triangulation (Earcut), UV,
                             vertex density, edge loops, mesh preview, topology
-    rig/                    Hierarchy, bind pose, weights, IK
+    rig/                    Hierarchy, bind pose, weights, IK, landmarks, auto-skeleton
     deformation/            Warp grid, morph, pose composition
     views/                  View selection và chuyển góc
     animation/              Easing, keyframes, clips, sampling
@@ -192,3 +192,6 @@ Không di chuyển, sửa hoặc xóa các file trên trong lượt chỉ yêu c
 - [DEFORMATION_PIPELINE.vi.md](DEFORMATION_PIPELINE.vi.md) — pipeline dùng core/runtime
 - [MCP_TOOLS.vi.md](MCP_TOOLS.vi.md) — MCP tools mapping sang application commands
 - [PROJECT_FORMAT.vi.md](PROJECT_FORMAT.vi.md) — schema dữ liệu từ contracts
+- [UI_SPECIFICATION.vi.md](UI_SPECIFICATION.vi.md) — thiết kế UI và icon system
+- [AUTO_RIG.vi.md](AUTO_RIG.vi.md) — auto-rig pipeline và landmark detection
+- [IMAGE_WORKFLOW.vi.md](IMAGE_WORKFLOW.vi.md) — quy trình tạo ảnh và tách layer AI

@@ -569,7 +569,193 @@ và MCP tool nào tương ứng — đảm bảo UI và MCP luôn đồng bộ.
 | Export button | Click | `export.start_job` | `export.start_job` |
 | View thumbnail | Click chọn view | `editor.switch_view` | `asset.attach_view` |
 
-## 11. Liên kết
+## 11. Hệ thống icon
+
+### 11.1 Nguyên tắc
+
+**Không dùng icon hệ thống** (Windows Segoe MDL2, macOS SF Symbols, Linux
+system icons). Icon hệ thống khác nhau giữa các OS → UI không đồng bộ,
+chức năng hiển thị không nhất quán.
+
+**Thứ tự ưu tiên:**
+
+```text
+1. Thư viện icon free có sẵn → dùng luôn (nhất quán, đã tối ưu)
+2. Không có icon phù hợp     → AI tạo SVG inline theo spec dưới đây
+3. KHÔNG BAO GIỜ              → dùng emoji, icon OS, hoặc ảnh bitmap
+```
+
+### 11.2 Thư viện icon khuyến nghị: Lucide Icons
+
+| Tiêu chí | Lucide |
+| --- | --- |
+| License | ISC (free, thương mại OK) |
+| Số lượng | 1500+ icons |
+| Format | SVG, có React/Vue/Web Component |
+| Style | Outline, 24×24, stroke-width 2px |
+| Customizable | Size, color, stroke-width qua props |
+| Tree-shakeable | ✅ chỉ bundle icons dùng |
+| Website | [lucide.dev](https://lucide.dev) |
+
+**Tại sao Lucide?** Fork cải tiến từ Feather Icons, cộng đồng lớn, cập nhật
+thường xuyên, có sẵn icons cho animation/rigging workflow (Bone, Layers,
+Palette, Play, Undo, Redo, Move, RotateCcw, Grid, Eye, EyeOff, Download...).
+
+**Thư viện thay thế** nếu Lucide thiếu: Phosphor Icons (MIT, 9000+ icons,
+6 weights), Tabler Icons (MIT, 5500+).
+
+### 11.3 Icon catalog cho Parallax Studio
+
+#### Setup Mode toolbar
+
+| Tool | Lucide icon | Tên | Fallback (AI SVG) |
+| --- | --- | --- | --- |
+| Select | `MousePointer2` | Pointer arrow | — |
+| Move | `Move` | 4 arrows | — |
+| Rotate | `RotateCcw` | Circular arrow | — |
+| Scale | `Maximize2` | Expand corners | — |
+| Mesh Edit | `Pentagon` | Polygon shape | Hoặc AI SVG: wireframe triangle grid |
+| Weight Paint | `Paintbrush` | Brush | — |
+| Bone Tool | `Bone` | Bone shape | — |
+| Landmark | `MapPin` | Pin marker | — |
+| Pivot | `Crosshair` | Crosshair | — |
+| Draw Order | `Layers` | Stacked layers | — |
+| Auto-Rig | `Wand2` | Magic wand | Hoặc AI SVG: skeleton + sparkle |
+| Template | `LayoutTemplate` | Layout grid | — |
+
+#### Animate Mode toolbar
+
+| Tool | Lucide icon | Tên | Fallback |
+| --- | --- | --- | --- |
+| Key ♦ | `Diamond` | Diamond keyframe | — |
+| Auto-Key | `KeyRound` | Key with circle | AI SVG: diamond + auto symbol |
+| Templates | `Library` | Book shelf | — |
+| Onion Skin | `GalleryVertical` | Stacked frames | AI SVG: ghost frames overlap |
+| Preview | `Play` | Play triangle | — |
+| Graph | `LineChart` | Curve graph | — |
+| Dopesheet | `BarChart3` | Horizontal bars | — |
+
+#### Chung (Header, Status, Panels)
+
+| Chức năng | Lucide icon | Tên |
+| --- | --- | --- |
+| Undo | `Undo2` | Undo arrow |
+| Redo | `Redo2` | Redo arrow |
+| Save | `Save` | Floppy disk |
+| Export | `Download` | Download arrow |
+| Import | `Upload` | Upload arrow |
+| AI Generate | `Sparkles` | Sparkle stars |
+| Settings | `Settings` | Gear |
+| Search | `Search` | Magnifying glass |
+| Visible | `Eye` | Eye open |
+| Hidden | `EyeOff` | Eye closed |
+| Locked | `Lock` | Padlock |
+| Unlocked | `Unlock` | Open padlock |
+| Collapse | `ChevronDown` | Chevron down |
+| Expand | `ChevronRight` | Chevron right |
+| Close | `X` | X mark |
+| Zoom In | `ZoomIn` | Magnifier + |
+| Zoom Out | `ZoomOut` | Magnifier − |
+| Fit View | `Maximize` | Expand frame |
+
+#### Hierarchy tree icons
+
+| Item | Lucide icon | Tên | Fallback |
+| --- | --- | --- | --- |
+| Project folder | `FolderOpen` | Open folder | — |
+| Character asset | `User` | Person silhouette | — |
+| Layer | `Square` | Square frame | — |
+| Bone | `Bone` | Bone | — |
+| Animation clip | `Film` | Film strip | — |
+| Scene | `Video` | Video camera | — |
+| View (camera) | `Camera` | Camera | — |
+
+### 11.4 AI-generated SVG — Khi thư viện không có
+
+Khi Lucide/Phosphor không có icon phù hợp cho chức năng đặc thù 2D animation,
+AI tạo SVG inline theo quy tắc:
+
+**Quy cách SVG:**
+
+```xml
+<!-- Template cho custom icon -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="24" height="24"
+     viewBox="0 0 24 24"
+     fill="none"
+     stroke="currentColor"
+     stroke-width="2"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+  <!-- Nội dung icon -->
+</svg>
+```
+
+**Quy tắc:**
+- ViewBox: `0 0 24 24` (khớp với Lucide).
+- Stroke-based (outline), không fill solid — nhất quán với Lucide style.
+- `stroke="currentColor"` — icon đổi màu theo theme (dark/light).
+- `stroke-width="2"` — cùng độ dày với Lucide.
+- Đơn giản, nhận diện được ở 16×16 px.
+- Không dùng text/font trong SVG (tránh font dependency).
+- Không dùng raster image (`<image>`) trong SVG.
+
+**Ví dụ: icon Auto-Rig (skeleton + sparkle)**
+
+```xml
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="24" height="24" viewBox="0 0 24 24"
+     fill="none" stroke="currentColor"
+     stroke-width="2" stroke-linecap="round"
+     stroke-linejoin="round">
+  <!-- Skeleton body -->
+  <circle cx="12" cy="4" r="2"/>
+  <line x1="12" y1="6" x2="12" y2="14"/>
+  <line x1="12" y1="8" x2="8" y2="12"/>
+  <line x1="12" y1="8" x2="16" y2="12"/>
+  <line x1="12" y1="14" x2="9" y2="20"/>
+  <line x1="12" y1="14" x2="15" y2="20"/>
+  <!-- Sparkle -->
+  <line x1="19" y1="2" x2="19" y2="6"/>
+  <line x1="17" y1="4" x2="21" y2="4"/>
+</svg>
+```
+
+**Ví dụ: icon Onion Skin (ghost frames)**
+
+```xml
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="24" height="24" viewBox="0 0 24 24"
+     fill="none" stroke="currentColor"
+     stroke-width="2" stroke-linecap="round"
+     stroke-linejoin="round">
+  <!-- Frame trước (ghost) -->
+  <rect x="2" y="4" width="12" height="16" rx="1"
+        opacity="0.3"/>
+  <!-- Frame hiện tại -->
+  <rect x="6" y="4" width="12" height="16" rx="1"
+        opacity="0.6"/>
+  <!-- Frame sau (ghost) -->
+  <rect x="10" y="4" width="12" height="16" rx="1"/>
+</svg>
+```
+
+### 11.5 Size và color tokens
+
+| Token | Giá trị | Dùng cho |
+| --- | --- | --- |
+| `--icon-sm` | 16px | Inline text, tree items |
+| `--icon-md` | 20px | Toolbar buttons |
+| `--icon-lg` | 24px | Header actions, standalone |
+| `--icon-xl` | 32px | Empty state, onboarding |
+| `--icon-color-default` | `currentColor` | Tự theo text color |
+| `--icon-color-active` | `var(--accent)` | Tool đang chọn |
+| `--icon-color-disabled` | `var(--muted)` | Tool không khả dụng |
+| `--icon-color-danger` | `var(--destructive)` | Xóa, cảnh báo |
+| `--icon-stroke-width` | 2 | Mặc định, khớp Lucide |
+| `--icon-stroke-width-thin` | 1.5 | Icons nhỏ 16px |
+
+## 12. Liên kết
 
 - [PLAN.vi.md](PLAN.vi.md) — scope sản phẩm
 - [COMMAND_BUS.vi.md](COMMAND_BUS.vi.md) — command bus mà UI gọi

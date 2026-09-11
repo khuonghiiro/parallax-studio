@@ -46,6 +46,8 @@ flowchart LR
 Live2D mô tả mesh deformation và deformer cho quay mặt/cử động; Spine mô tả
 skinning theo trọng số. Đây là nguồn tham khảo cơ chế, không phải dependency
 bắt buộc. [Live2D deformers][live2d], [Spine weights][spine-weights].
+Cơ chế auto-rig (landmarks, auto-skeleton, auto-weights) và mesh topology
+được quy định chi tiết tại [AUTO_RIG.vi.md](AUTO_RIG.vi.md).
 
 ### Bộ góc nhìn
 
@@ -74,7 +76,7 @@ là tính năng sau, không thay thế bộ góc nhìn.
 
 | Thành phần | Lựa chọn | Phạm vi |
 | --- | --- | --- |
-| UI | React + TypeScript | Asset editor, rig editor, timeline và inspector |
+| UI | React + TypeScript + Lucide Icons | Asset editor, rig editor, timeline và inspector ([chi tiết UI](UI_SPECIFICATION.vi.md)) |
 | Render | Three.js, WebGL2 trước | Mesh phẳng có xương, camera, material và bóng |
 | Tam giác hóa | Earcut | Tam giác hóa contour đã kiểm tra |
 | PSD | ag-psd, tùy chọn | Layer trong phạm vi thư viện hỗ trợ; PNG chia lớp được ưu tiên |
@@ -157,6 +159,7 @@ Chốt schema chi tiết ở mốc 0 để tránh khóa cứng định dạng tr
 [Chi tiết schema và cấu trúc project](PROJECT_FORMAT.vi.md).
 [Kiến trúc command bus và undo/redo](COMMAND_BUS.vi.md).
 [Catalog MCP tools](MCP_TOOLS.vi.md).
+[Thiết kế giao diện và hệ thống icon](UI_SPECIFICATION.vi.md).
 
 ## 6. Preview và export
 
