@@ -4,7 +4,7 @@ This is the shared rule source for AI agents and people who edit code in the
 project. User-requested rules take effect immediately; the product architecture
 remains a proposal awaiting approval.
 
-This file is the English translation of the canonical Vietnamese file at
+This file is the English translation at `docs/CODING_RULES.md` of the canonical Vietnamese file at
 `docs_vi/CODING_RULES.md`; changes must remain synchronized according to the
 [documentation policy](DOCUMENTATION_POLICY.md).
 

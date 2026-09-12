@@ -19,36 +19,36 @@
     },
     {
       "file": "ARCHITECTURE_DECISIONS.md",
-      "revision": 1,
-      "reviewStatus": "needs-review",
-      "sourceSha256": "7595b75aa6e16b4e90be0fd7b5b3e0ca1f052cef9f4c6a9ebe0c0a8ecb52b353",
-      "translationSha256": "b5542a4b7ef4889bf40fadc3a09dcc41f4e075d4855ef6b1ed2459b0832ce31f"
+      "revision": 2,
+      "reviewStatus": "synced",
+      "sourceSha256": "51483da910ca2d80a5c5908e78399aad0900bbab636e2b925f46c38cb177852d",
+      "translationSha256": "82f003c7457444eb29d6e9cbfbb7afd5f5a36bee6db5bbb5e1dd881846ed9d80"
     },
     {
       "file": "AUTO_RIG.md",
-      "revision": 1,
-      "reviewStatus": "needs-review",
-      "sourceSha256": "bfc4d5b703921b33d08dc9c13a91b632cc507707271b3b25c9c512b3c7620b8c",
-      "translationSha256": "3dfd18a4204f6d010142e06280785ea41b3ee284dc772f075b2778109e311130"
+      "revision": 2,
+      "reviewStatus": "synced",
+      "sourceSha256": "9ade549721c926bd187bde5138a0702b438cc0dfe5f1f393849c81a99a5fa934",
+      "translationSha256": "4b477161e94d82a720acbd3e934975e25cb8948abe69fe87c8f2fe0dc50ee1a9"
     },
     {
       "file": "CODING_RULES.md",
-      "revision": 1,
-      "reviewStatus": "needs-review",
-      "sourceSha256": "6ffb5b9195e4637d66091286c2d2bdeb3eff83250e26cfe82b5b276a82b93980",
-      "translationSha256": "04664678ccb6bbe2ae8e2a4b093fc45a65778a00e5fe55d68a772bcb311e6593"
+      "revision": 2,
+      "reviewStatus": "synced",
+      "sourceSha256": "fed2694d0be2476287f4dca6437e72e89e4d15a08d352e69e17352190b995656",
+      "translationSha256": "c64da656304672873e3b9ebbbb40c5b006d9d17396ade61c746f538507d16bbb"
     },
     {
       "file": "COMMAND_BUS.md",
-      "revision": 1,
-      "reviewStatus": "needs-review",
-      "sourceSha256": "f05e1ca5fbed7aeb6bdc77eefc5c0d0b1fc9e8db0bcbf2d3e4cef257db4d9c60",
-      "translationSha256": "820ee893cfafa55fc3b17827d3ebf442c3163dd85ab4f82a094acbd52357c418"
+      "revision": 2,
+      "reviewStatus": "synced",
+      "sourceSha256": "211f4008b283b839e2fc14d7d55ca2161bb401ebddd6a26ab1e05ebecb09d737",
+      "translationSha256": "50d7505cec3a8d68085ec30cfe9e96ff20fd9b57fae4a5983a1b154229762ef6"
     },
     {
       "file": "DEFORMATION_PIPELINE.md",
       "revision": 1,
-      "reviewStatus": "needs-review",
+      "reviewStatus": "synced",
       "sourceSha256": "d66103212517c03e40de3fab5870ab096617f3868f0d79d05d25d4057ce24211",
       "translationSha256": "0ec46e1bc122da2ce4d7ada8ddbfb4017bd20000d728db49cee76e7e5634b7ff"
     },
@@ -61,66 +61,66 @@
     },
     {
       "file": "GLOSSARY.md",
-      "revision": 1,
-      "reviewStatus": "needs-review",
-      "sourceSha256": "584615a460e7d9cd82a42bf7fd5781ea6cb027e9f39accc269c7c7559122e921",
-      "translationSha256": "cad472812dcad0b523992827bf3f7c685f2337243f54abceee23bff4747d4638"
+      "revision": 2,
+      "reviewStatus": "synced",
+      "sourceSha256": "a0ab8cf6138b76a6574e897f4bd95a526bd157b633611aef506e6fb54aac22ad",
+      "translationSha256": "aa355bb1e5387a8187a27df7435210a50c9537af70f05f766ea9b81fa9fa7e7b"
     },
     {
       "file": "IMAGE_WORKFLOW.md",
-      "revision": 1,
-      "reviewStatus": "needs-review",
-      "sourceSha256": "9372f6dcf9d7ca083decfa6f7378f1b9c1317f7a1ac6ee07a1b12922ecfc1591",
-      "translationSha256": "9892297ca9412be2bcb13d5a31b0871fc06068246c1b0f30c49e899a79b2acb5"
+      "revision": 2,
+      "reviewStatus": "synced",
+      "sourceSha256": "c71003a54f5cc29d3f2f441d4d4f810e5249eada2a22498a09dd35472c5466da",
+      "translationSha256": "dc7acd36afd4cbc5fbfada17c95392ba0620fefa9b0ba34dab1a40b14bd2cd4f"
     },
     {
       "file": "MCP_TOOLS.md",
-      "revision": 1,
-      "reviewStatus": "needs-review",
-      "sourceSha256": "4e98636b678d1d096248f2035993922e9222bc6e4d74d42f488b6ea0ddb2c955",
-      "translationSha256": "54a787956f94dba85675d7eff4ac084e7886ddb1d6b07eb8e1dd1e4f99293f2d"
+      "revision": 2,
+      "reviewStatus": "synced",
+      "sourceSha256": "bbfc1e2e7c455707f07876c1d47e2fd7396a2b40e88af74ae1b8436707d63d44",
+      "translationSha256": "cb2b9b99074ebd2d3a6ffab797c12f5d62ff75e3fceecc5d13aaa8f9b8623cd1"
     },
     {
       "file": "MODULE_MAP.md",
-      "revision": 1,
-      "reviewStatus": "needs-review",
-      "sourceSha256": "ce53d8716b4f78764fa971e3df22fe6a2b8bfba960b7b5997f5c61ab74c06a02",
-      "translationSha256": "11be7e3d0e275b711f7732cbce0c9a2609d7e06b694f67da35f4fa15d2df3650"
+      "revision": 2,
+      "reviewStatus": "synced",
+      "sourceSha256": "497839f3dffbc2125d1aa82ad728bf6623cfb18eeefcce377c8c3d944ec88dd7",
+      "translationSha256": "91e857e8f0300289f80f9067ebf3d106e1fa78b2e65775f9c28bd44e9f12cd19"
     },
     {
       "file": "PLAN.md",
-      "revision": 1,
-      "reviewStatus": "needs-review",
-      "sourceSha256": "99e1776d217dd83aa3725e9386cb2ef9775abc47f5d71dea771bdbe436bc62b6",
-      "translationSha256": "b548839a720665a4d352c49b14cc07e55bc2fb65c4c0170a62a63a410c57d0bc"
+      "revision": 2,
+      "reviewStatus": "synced",
+      "sourceSha256": "985af2d038ca5de8b10967bfa4913c75ba24ee396006ea8175f77f7bfd843599",
+      "translationSha256": "262d48d575f75550bbb0213ee8a55fab355a200b786499ecbe7411fbd51a9a85"
     },
     {
       "file": "PROJECT_FORMAT.md",
-      "revision": 1,
-      "reviewStatus": "needs-review",
-      "sourceSha256": "55dcdf90fc7a4e1dac284790b140e5e28df71b5e1c6270ed6c9e1c0e5a671236",
-      "translationSha256": "012591054abe0cce7a60682916cf6a127d6dd6aa6c1fe5d10229df27a9f36563"
+      "revision": 2,
+      "reviewStatus": "synced",
+      "sourceSha256": "0415fd6c51fb95e39b545954809687bdd2e7b6dc3fc3c9551cf18c977eca4f7b",
+      "translationSha256": "7733717ef529ace936644a130dd3778f8084f30d8c65f84a940e3b9cf90d83bb"
     },
     {
       "file": "RENDER_PROFILES.md",
       "revision": 1,
-      "reviewStatus": "needs-review",
+      "reviewStatus": "synced",
       "sourceSha256": "6c38e3f88c7cccbbc0a41f966f82975e41c9d194d3a7d07ac5d3308ae43c445e",
       "translationSha256": "ca210970e6dae18f40b3c0a00c0be4d6c54c849c6264eb05a9eb675dded91860"
     },
     {
       "file": "TESTING_STRATEGY.md",
-      "revision": 1,
-      "reviewStatus": "needs-review",
-      "sourceSha256": "ec9e65c162be94a2f7444b3e60d78d40e350124777e6c266c267daaba54a3eee",
-      "translationSha256": "ff7b48cb5dd475cdd361282222fd70ed664f479044b036885c8f88de4c2fa896"
+      "revision": 2,
+      "reviewStatus": "synced",
+      "sourceSha256": "446cdf77f8aecdca4ae76d6f869d51c46df778b6f7a9eddbe05a4b9fda5a7777",
+      "translationSha256": "217ad2e74723f40bfaea015330f7fb625d3c3a2dab5e5668c3b2fa06bbcb49d6"
     },
     {
       "file": "UI_SPECIFICATION.md",
-      "revision": 1,
-      "reviewStatus": "needs-review",
-      "sourceSha256": "920f8a64e2634e51532e4c33ac5725ccd031b00234d096c9af694743f6c3ebbd",
-      "translationSha256": "0cb1f4c942526c28aff45120e4339c89224418458b271a4accf1f2e3b4601445"
+      "revision": 2,
+      "reviewStatus": "synced",
+      "sourceSha256": "9798b19662ca39ac7e65acd27d642cf58a81354f8c888be9cca571d4a5be732b",
+      "translationSha256": "5dc3e78d5408c43b5bdbfe4585309f9cda3b7efa28343f559a7915195bd4a028"
     }
   ]
 }

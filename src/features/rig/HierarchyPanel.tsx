@@ -24,6 +24,10 @@ export function HierarchyPanel({
     setSelectedAssetId,
     selectedBoneId,
     setSelectedBoneId,
+    selectedInstanceId,
+    setSelectedInstanceId,
+    selectedShotId,
+    setSelectedShotId,
     projectState,
     dispatch,
     loadDemoCharacter,
@@ -134,46 +138,48 @@ export function HierarchyPanel({
         )}
       </Panel>
 
-      {/* Skeleton Panel */}
-      <Panel
-        title="Skeleton"
-        id="panel-skeleton"
-        headerActions={
-          selectedAssetId && !currentAssetData?.skeleton ? (
-            <Button
-              icon={Wand2}
-              iconOnly
-              size="sm"
-              variant="ghost"
-              title="Auto Rig Humanoid"
-              onClick={handleApplyRig}
-            />
-          ) : undefined
-        }
-      >
-        {filteredBones.length === 0 ? (
-          <div className="hierarchy__empty">
-            <Icon icon={Bone} size="lg" color="var(--text-muted)" />
-            <span>{selectedAssetId ? 'Click Auto Rig to create bones' : 'Select an asset first'}</span>
-          </div>
-        ) : (
-          <div className="hierarchy__list">
-            {filteredBones.map((bone) => (
-              <div
-                key={bone.id}
-                className={`tree-item ${selectedBoneId === bone.id ? 'tree-item--selected' : ''}`}
-                onClick={() => setSelectedBoneId(bone.id)}
-              >
-                <Icon icon={Bone} size="sm" color="var(--success)" />
-                <span className="tree-item__label">{bone.name}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Panel>
+      {/* Skeleton Panel — Rig & Setup workspaces */}
+      {(mode === 'rig' || mode === 'draw') && (
+        <Panel
+          title="Skeleton & Bones"
+          id="panel-skeleton"
+          headerActions={
+            selectedAssetId && !currentAssetData?.skeleton ? (
+              <Button
+                icon={Wand2}
+                iconOnly
+                size="sm"
+                variant="ghost"
+                title="Auto Rig Humanoid"
+                onClick={handleApplyRig}
+              />
+            ) : undefined
+          }
+        >
+          {filteredBones.length === 0 ? (
+            <div className="hierarchy__empty">
+              <Icon icon={Bone} size="lg" color="var(--text-muted)" />
+              <span>{selectedAssetId ? 'Click Auto Rig to create bones' : 'Select an asset first'}</span>
+            </div>
+          ) : (
+            <div className="hierarchy__list">
+              {filteredBones.map((bone) => (
+                <div
+                  key={bone.id}
+                  className={`tree-item ${selectedBoneId === bone.id ? 'tree-item--selected' : ''}`}
+                  onClick={() => setSelectedBoneId(bone.id)}
+                >
+                  <Icon icon={Bone} size="sm" color="var(--success)" />
+                  <span className="tree-item__label">{bone.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      )}
 
-      {/* Views Panel — Setup mode only */}
-      {mode === 'setup' && (
+      {/* Views Panel — Rig workspace */}
+      {mode === 'rig' && (
         <Panel title="Views" id="panel-views" defaultCollapsed={false}>
           <div className="hierarchy__list">
             {[
@@ -210,37 +216,141 @@ export function HierarchyPanel({
         </Panel>
       )}
 
-      {/* Animations Panel — Animate mode only */}
+      {/* Animations Panel — Animate workspace */}
       {mode === 'animate' && (
-        <Panel title="Animations" id="panel-animations">
+        <Panel
+          title="Animation Clips"
+          id="panel-animations"
+          headerActions={
+            <Button
+              icon={Plus}
+              iconOnly
+              size="sm"
+              variant="ghost"
+              title="Add Custom Clip"
+              onClick={() => {
+                const name = prompt('Clip name:');
+                if (name) setActiveClipId(name.trim().toLowerCase());
+              }}
+            />
+          }
+        >
           <div className="hierarchy__list">
-            <div
-              className={`tree-item ${activeClipId === 'idle' ? 'tree-item--selected' : ''}`}
-              onClick={() => setActiveClipId('idle')}
-              style={{ cursor: 'pointer' }}
-            >
-              <Icon icon={Film} size="sm" color={activeClipId === 'idle' ? 'var(--accent)' : 'var(--warning)'} />
-              <span className="tree-item__label">🌿 Đứng thở (Idle)</span>
-              {activeClipId === 'idle' && <span className="badge badge--success">Active</span>}
-            </div>
-            <div
-              className={`tree-item ${activeClipId === 'walk' ? 'tree-item--selected' : ''}`}
-              onClick={() => setActiveClipId('walk')}
-              style={{ cursor: 'pointer' }}
-            >
-              <Icon icon={Film} size="sm" color={activeClipId === 'walk' ? 'var(--accent)' : 'var(--warning)'} />
-              <span className="tree-item__label">🚶‍♂️ Bước đi (Walk)</span>
-              {activeClipId === 'walk' && <span className="badge badge--success">Active</span>}
-            </div>
-            <div
-              className={`tree-item ${activeClipId === 'ready' ? 'tree-item--selected' : ''}`}
-              onClick={() => setActiveClipId('ready')}
-              style={{ cursor: 'pointer' }}
-            >
-              <Icon icon={Film} size="sm" color={activeClipId === 'ready' ? 'var(--accent)' : 'var(--warning)'} />
-              <span className="tree-item__label">⚔️ Thủ thế (Ready)</span>
-              {activeClipId === 'ready' && <span className="badge badge--success">Active</span>}
-            </div>
+            {[
+              { id: 'idle', label: '🌿 Đứng thở (Idle)' },
+              { id: 'walk', label: '🚶‍♂️ Bước đi (Walk)' },
+              { id: 'ready', label: '⚔️ Thủ thế (Ready)' },
+              ...(activeClipId && !['idle', 'walk', 'ready'].includes(activeClipId)
+                ? [{ id: activeClipId, label: `✨ ${activeClipId}` }]
+                : []),
+            ].map((clip) => (
+              <div
+                key={clip.id}
+                className={`tree-item ${activeClipId === clip.id ? 'tree-item--selected' : ''}`}
+                onClick={() => setActiveClipId(clip.id)}
+                style={{ cursor: 'pointer' }}
+              >
+                <Icon
+                  icon={Film}
+                  size="sm"
+                  color={activeClipId === clip.id ? 'var(--accent)' : 'var(--warning)'}
+                />
+                <span className="tree-item__label">{clip.label}</span>
+                {activeClipId === clip.id && <span className="badge badge--success">Active</span>}
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
+
+      {/* Scene Staging Panel — Compose workspace */}
+      {mode === 'compose' && (
+        <Panel
+          title="Scene Instances"
+          id="panel-scene-instances"
+          headerActions={
+            selectedAssetId ? (
+              <Button
+                icon={Plus}
+                iconOnly
+                size="sm"
+                variant="ghost"
+                title="Stage Asset Instance"
+                onClick={async () => {
+                  await dispatch({
+                    type: 'add_instance',
+                    domain: 'scene',
+                    data: {
+                      assetId: selectedAssetId,
+                      name: `${currentAssetData?.name || 'Asset'} Instance`,
+                      position: { x: 0, y: 0 },
+                      depth: 0,
+                      scale: 1,
+                      rotation: 0,
+                    },
+                  });
+                }}
+              />
+            ) : undefined
+          }
+        >
+          <div className="hierarchy__list">
+            {projectState.getAllSceneData()[0]?.instances?.length ? (
+              projectState.getAllSceneData()[0]?.instances?.map((inst) => {
+                const isSelected = selectedInstanceId === inst.id;
+                const depthLabel =
+                  inst.depth > 50
+                    ? 'Hậu cảnh'
+                    : inst.depth < -50
+                      ? 'Tiền cảnh'
+                      : 'Trung cảnh';
+                return (
+                  <div
+                    key={inst.id}
+                    className={`tree-item ${isSelected ? 'tree-item--selected' : ''}`}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setSelectedInstanceId(inst.id)}
+                  >
+                    <Icon icon={Layers} size="sm" color={isSelected ? 'var(--accent)' : 'var(--info)'} />
+                    <span className="tree-item__label">{inst.name}</span>
+                    <span className="badge badge--neutral">
+                      {depthLabel} ({inst.depth})
+                    </span>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="hierarchy__empty">
+                <Icon icon={Layers} size="lg" color="var(--text-muted)" />
+                <span>No instances staged yet. Click + to stage.</span>
+              </div>
+            )}
+          </div>
+        </Panel>
+      )}
+
+      {/* Shots & Sequence Panel — Edit workspace */}
+      {mode === 'edit' && (
+        <Panel title="Sequence Shots" id="panel-sequence-shots">
+          <div className="hierarchy__list">
+            {(projectState.getAllSceneData()[0]?.shots || [
+              { id: 'shot-1', name: 'Shot 1: Wide' },
+              { id: 'shot-2', name: 'Shot 2: Close-up' },
+            ]).map((s) => {
+              const isSelected = selectedShotId === s.id;
+              return (
+                <div
+                  key={s.id}
+                  className={`tree-item ${isSelected ? 'tree-item--selected' : ''}`}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setSelectedShotId(s.id)}
+                >
+                  <Icon icon={Film} size="sm" color={isSelected ? 'var(--accent)' : 'var(--warning)'} />
+                  <span className="tree-item__label">{s.name}</span>
+                  {isSelected && <span className="badge badge--success">Active</span>}
+                </div>
+              );
+            })}
           </div>
         </Panel>
       )}

@@ -3,7 +3,7 @@
 Đây là nguồn quy tắc chung cho AI và người sửa code trong dự án. Quy tắc do người
 dùng yêu cầu có hiệu lực ngay; kiến trúc sản phẩm còn là đề xuất chờ duyệt.
 
-File này là bản tiếng Việt gốc. Bản dịch cho AI nằm tại
+File này là bản tiếng Việt gốc tại `docs_vi/CODING_RULES.md`. Bản dịch cho AI nằm tại
 `docs/CODING_RULES.md`; thay đổi phải đồng bộ theo
 [chính sách tài liệu](DOCUMENTATION_POLICY.md).
 

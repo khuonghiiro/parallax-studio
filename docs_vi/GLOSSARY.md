@@ -39,6 +39,11 @@ Vùng nhìn của camera trong scene, xác định bởi loại (orthographic/pe
 vị trí, zoom và near/far. Ảnh hưởng parallax và safe area.
 → [PLAN.md](PLAN.md) mục 4.
 
+### Cel
+Một hình vẽ raster riêng biệt có định danh ổn định trong cel library. Một cel có thể
+được giữ (hold) trên nhiều frame qua các Exposure khác nhau.
+→ [PROJECT_FORMAT.md](PROJECT_FORMAT.md) mục 3, [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) mục 3.
+
 ### Clip
 Đoạn animation trên track, có start time, end time và danh sách keyframes.
 Clip có thể tái sử dụng cho nhiều instance.
@@ -53,6 +58,11 @@ và baseRevision. Thực hiện qua command bus.
 Lớp điều phối duy nhất cho mọi thay đổi state. UI và MCP đều dispatch command
 qua đây. Chịu trách nhiệm validation, execution, history và revision.
 → [COMMAND_BUS.md](COMMAND_BUS.md).
+
+### Composition
+Sân khấu 2.5D chứa cây phân cấp node, các mặt phẳng chiều sâu (depth planes), các
+AssetInstance, đường đi camera và nguồn sáng/bóng đổ.
+→ [PROJECT_FORMAT.md](PROJECT_FORMAT.md) mục 6, [UI_SPECIFICATION.md](UI_SPECIFICATION.md) mục 7.
 
 ## D
 
@@ -71,6 +81,11 @@ Thứ tự vẽ các layer trong một asset. Layer có draw order cao hơn vẽ
 thấp hơn. Mỗi view có draw order riêng.
 → [PROJECT_FORMAT.md](PROJECT_FORMAT.md) mục 3.
 
+### DrawingDocument
+Tài liệu vẽ 2D chứa kích thước canvas, color profile, origin và cây layer (DrawingLayer).
+Có thể mở và vẽ độc lập hoặc liên kết với asset.
+→ [PROJECT_FORMAT.md](PROJECT_FORMAT.md) mục 3, [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) mục 2.
+
 ## E
 
 ### Easing
@@ -79,6 +94,11 @@ Xác định tốc độ chuyển đổi giá trị theo thời gian.
 → [MODULE_MAP.md](MODULE_MAP.md) — `core/animation/`.
 
 ### Export FPS → xem Output FPS.
+
+### Exposure
+Khoảng thời gian (tính bằng frame hoặc tick) giữ một Cel cụ thể hoặc để trống (blank)
+trên một DrawingLayer.
+→ [PROJECT_FORMAT.md](PROJECT_FORMAT.md) mục 3, [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) mục 3.
 
 ## F
 
@@ -192,9 +212,14 @@ snapshot export và undo tracking.
 ## S
 
 ### Scene
-Không gian dựng cảnh chứa instances, camera, lights và shadow receivers.
-Mỗi scene có timeline riêng.
-→ [PROJECT_FORMAT.md](PROJECT_FORMAT.md) mục 4.
+Không gian dựng cảnh 2.5D (xem thêm [Composition](#composition)). Trong định dạng mới,
+Composition là thực thể chính thức quản lý các depth plane, instance và camera.
+→ [PROJECT_FORMAT.md](PROJECT_FORMAT.md) mục 6.
+
+### Sequence
+Bản dựng hoàn chỉnh của một tập hợp các Shot được sắp xếp theo trục thời gian tuyến tính
+của phim, kèm các track audio và subtitle cue.
+→ [PROJECT_FORMAT.md](PROJECT_FORMAT.md) mục 6, [UI_SPECIFICATION.md](UI_SPECIFICATION.md) mục 8.
 
 ### Shadow proxy
 Hình đơn giản (mesh phụ) dùng để tạo bóng có thể tích hơn cho card phẳng.
@@ -259,6 +284,12 @@ vertex nội suy bilinear từ 4 góc cell chứa nó. Dùng cho quay mặt nh�
 Trọng số xác định mức ảnh hưởng của mỗi bone lên mỗi vertex. Tối đa 4 bone per
 vertex. Tổng weights per vertex = 1.0.
 → [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) mục 2 bước 3.
+
+### Workspace
+Bố cục giao diện và bộ công cụ chuyên biệt cho từng giai đoạn làm việc trong cùng một
+project (`draw`, `rig`, `animate`, `compose`, `edit`). Chuyển workspace không làm thay
+đổi hay phân mảnh trạng thái dự án.
+→ [UI_SPECIFICATION.md](UI_SPECIFICATION.md) mục 2, [PLAN.md](PLAN.md) mục 2.
 
 ### World space
 Không gian tọa độ chung của scene. Gốc tại tâm scene, X→, Y↑, Z+ ra ngoài.

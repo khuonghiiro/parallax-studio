@@ -137,7 +137,7 @@ function buildDecomposedLayerMesh(
 
       const boneMap = new Map<string, THREE.Bone>();
       skeleton.bones.forEach((b) => boneMap.set(b.name, b));
-      const boneDefMap = new Map<string, (typeof asset.skeleton)!.bones[number]>();
+      const boneDefMap = new Map<string, NonNullable<typeof asset.skeleton>['bones'][number]>();
       asset.skeleton!.bones.forEach((b) => boneDefMap.set(b.name, b));
 
       const sortedLayers = [...(asset.layers || [])].sort(

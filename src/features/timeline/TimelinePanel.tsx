@@ -15,7 +15,6 @@ const TOTAL_FRAMES = 120; // 5.0 seconds at 24fps
  */
 export function TimelinePanel(): React.JSX.Element {
   const [autoKey, setAutoKey] = useState(false);
-  const [activeShotId, setActiveShotId] = useState<string>('shot-1');
   const gridRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -24,10 +23,13 @@ export function TimelinePanel(): React.JSX.Element {
     isPlaying,
     setIsPlaying,
     selectedAssetId,
+    selectedShotId,
+    setSelectedShotId,
     projectState,
     dispatch,
     activeClipId,
     setActiveClipId,
+    mode,
   } = useEditor();
 
   const scenes = projectState.getAllSceneData();
@@ -223,75 +225,114 @@ export function TimelinePanel(): React.JSX.Element {
           overflowX: 'auto',
         }}
       >
-        <span
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            fontWeight: 600,
-            color: 'var(--text-secondary)',
-            marginRight: 4,
-          }}
-        >
-          <Clapperboard size={13} />
-          Shots:
-        </span>
+        {mode === 'draw' && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--accent)' }}>
+            <span>🎨</span>
+            <span>Exposure Sheet (Timing & Cels)</span>
+            <span className="badge badge--neutral" style={{ fontSize: '9px' }}>Drawing FPS: 24</span>
+          </span>
+        )}
 
-        {shots.map((shot) => {
-          const isActive = shot.id === activeShotId;
-          return (
-            <button
-              key={shot.id}
-              className={`btn btn--sm ${isActive ? 'btn--primary' : 'btn--ghost'}`}
+        {mode === 'rig' && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--warning)' }}>
+            <span>🦴</span>
+            <span>Test Pose & Deformation Scrub</span>
+            <span className="badge badge--neutral" style={{ fontSize: '9px' }}>Không ghi key mặc định</span>
+          </span>
+        )}
+
+        {mode === 'animate' && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--accent)' }}>
+            <span>🎬</span>
+            <span>Clip Dopesheet:</span>
+            <span className="badge badge--success">{activeClipId}</span>
+          </span>
+        )}
+
+        {(mode === 'compose' || mode === 'edit') && (
+          <>
+            <span
               style={{
-                fontSize: '11px',
-                padding: '2px 8px',
-                height: '24px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 4,
-              }}
-              onClick={() => {
-                setActiveShotId(shot.id);
-                setCurrentFrame(shot.startFrame);
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                marginRight: 4,
               }}
             >
-              <span>{shot.name}</span>
-              <span style={{ opacity: 0.7, fontSize: '10px' }}>
-                ({shot.startFrame}-{shot.endFrame}f)
-              </span>
-              {shot.transitionIn && shot.transitionIn !== 'cut' && (
-                <span
+              <Clapperboard size={13} />
+              Shots:
+            </span>
+
+            {shots.map((shot) => {
+              const isActive = (selectedShotId ?? 'shot-1') === shot.id;
+              return (
+                <button
+                  key={shot.id}
+                  className={`btn btn--sm ${isActive ? 'btn--primary' : 'btn--ghost'}`}
                   style={{
-                    background: 'rgba(255,255,255,0.15)',
-                    padding: '0 3px',
-                    borderRadius: '2px',
-                    fontSize: '9px',
+                    fontSize: '11px',
+                    padding: '2px 8px',
+                    height: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                  onClick={() => {
+                    setSelectedShotId(shot.id);
                   }}
                 >
-                  {shot.transitionIn}
-                </span>
-              )}
-            </button>
-          );
-        })}
+                  <span>{shot.name}</span>
+                  <span style={{ opacity: 0.7, fontSize: '10px' }}>
+                    ({shot.startFrame}-{shot.endFrame}f)
+                  </span>
+                  {shot.transitionIn && shot.transitionIn !== 'cut' && (
+                    <span
+                      style={{
+                        background: 'rgba(255,255,255,0.15)',
+                        padding: '0 3px',
+                        borderRadius: '2px',
+                        fontSize: '9px',
+                      }}
+                    >
+                      {shot.transitionIn}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
 
-        <Button
-          icon={Plus}
-          size="sm"
-          variant="ghost"
-          onClick={handleAddShot}
-          title="Add New Shot"
-        >
-          Shot
-        </Button>
+            <Button
+              icon={Plus}
+              size="sm"
+              variant="ghost"
+              onClick={handleAddShot}
+              title="Add New Shot"
+            >
+              Shot
+            </Button>
+          </>
+        )}
       </div>
 
       {/* Track Area */}
       <div className="timeline__body">
         {/* Track Labels */}
         <div className="timeline__labels">
-          {tracks.length === 0 ? (
+          {mode === 'edit' ? (
+            <>
+              <div className="timeline__track-label" style={{ color: 'var(--accent)' }}>
+                🎬 Shot Placements
+              </div>
+              <div className="timeline__track-label" style={{ color: '#10b981' }}>
+                🎵 Audio (BGM & SFX)
+              </div>
+              <div className="timeline__track-label" style={{ color: '#38bdf8' }}>
+                💬 Subtitles & Text
+              </div>
+            </>
+          ) : tracks.length === 0 ? (
             <div className="timeline__empty-label">No tracks active</div>
           ) : (
             tracks.map((t, idx) => (
@@ -320,7 +361,135 @@ export function TimelinePanel(): React.JSX.Element {
           />
 
           {/* Tracks and Keyframes */}
-          {tracks.length === 0 ? (
+          {mode === 'edit' ? (
+            <div className="timeline__track-rows">
+              {/* Row 1: Shots Track */}
+              <div
+                className="timeline__track-row"
+                style={{
+                  position: 'relative',
+                  height: '28px',
+                  background: 'rgba(255,255,255,0.02)',
+                }}
+              >
+                {shots.map((shot) => {
+                  const left = (shot.startFrame / TOTAL_FRAMES) * 100;
+                  const width = ((shot.endFrame - shot.startFrame) / TOTAL_FRAMES) * 100;
+                  const isCur =
+                    (selectedShotId ? selectedShotId === shot.id : false) ||
+                    (currentFrame >= shot.startFrame && currentFrame < shot.endFrame);
+                  return (
+                    <div
+                      key={shot.id}
+                      style={{
+                        position: 'absolute',
+                        left: `${left}%`,
+                        width: `${width}%`,
+                        height: '24px',
+                        background: isCur
+                          ? 'rgba(99, 102, 241, 0.45)'
+                          : 'rgba(99, 102, 241, 0.22)',
+                        border: isCur ? '1px solid #818cf8' : '1px solid rgba(99, 102, 241, 0.4)',
+                        borderRadius: '4px',
+                        padding: '2px 8px',
+                        fontSize: '11px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => setSelectedShotId(shot.id)}
+                      title={`Shot: ${shot.name} (${shot.startFrame}-${shot.endFrame}f)`}
+                    >
+                      <span style={{ fontWeight: 600 }}>{shot.name}</span>
+                      <span style={{ fontSize: '9px', opacity: 0.8 }}>{shot.transitionIn}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Row 2: Audio Track with Waveform */}
+              <div
+                className="timeline__track-row"
+                style={{
+                  position: 'relative',
+                  height: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  padding: '0 4px',
+                  background: 'rgba(16, 185, 129, 0.05)',
+                }}
+              >
+                {Array.from({ length: 48 }).map((_, i) => {
+                  const height = 6 + Math.abs(Math.sin(i * 0.45) * 16);
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        flex: 1,
+                        height: `${height}px`,
+                        background: 'rgba(16, 185, 129, 0.65)',
+                        borderRadius: '1px',
+                      }}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Row 3: Subtitle Track */}
+              <div
+                className="timeline__track-row"
+                style={{
+                  position: 'relative',
+                  height: '28px',
+                  background: 'rgba(56, 189, 248, 0.04)',
+                }}
+              >
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: '0%',
+                    width: '46%',
+                    height: '22px',
+                    background: 'rgba(56, 189, 248, 0.22)',
+                    border: '1px solid rgba(56, 189, 248, 0.45)',
+                    borderRadius: '4px',
+                    padding: '2px 8px',
+                    fontSize: '10px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    color: '#e0f2fe',
+                  }}
+                  title="Parallax Studio: Dàn cảnh 2.5D và làm phim hoạt hình"
+                >
+                  "Parallax Studio: Dàn cảnh 2.5D và làm phim..."
+                </div>
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: '48%',
+                    width: '51%',
+                    height: '22px',
+                    background: 'rgba(56, 189, 248, 0.22)',
+                    border: '1px solid rgba(56, 189, 248, 0.45)',
+                    borderRadius: '4px',
+                    padding: '2px 8px',
+                    fontSize: '10px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    color: '#e0f2fe',
+                  }}
+                  title="Xuất video điện ảnh chuẩn 4K / 1080p với hiệu ứng thị sai mượt mà"
+                >
+                  "Xuất video điện ảnh chuẩn 4K / 1080p..."
+                </div>
+              </div>
+            </div>
+          ) : tracks.length === 0 ? (
             <div className="timeline__tracks-empty">
               Import and rig an asset to view animation timeline tracks
             </div>

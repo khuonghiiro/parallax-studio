@@ -10,15 +10,17 @@ import {
   type AssetData,
 } from '@parallax/application';
 import type { CommandPayload, CommandResult } from '@parallax/contracts';
-import type { EditorMode } from './layout/MenuBar.js';
+import type { WorkspaceId } from './layout/MenuBar.js';
 
 export interface EditorContextValue {
   projectState: ProjectState;
   commandBus: CommandBus;
   commandRegistry: CommandRegistry;
   snapshot: ProjectSnapshot | null;
-  mode: EditorMode;
-  setMode: (mode: EditorMode) => void;
+  workspace: WorkspaceId;
+  setWorkspace: (ws: WorkspaceId) => void;
+  mode: WorkspaceId;
+  setMode: (mode: WorkspaceId) => void;
   selectedAssetId: string | null;
   setSelectedAssetId: (id: string | null) => void;
   selectedBoneId: string | null;
@@ -34,8 +36,13 @@ export interface EditorContextValue {
   dispatch: (payload: CommandPayload) => Promise<CommandResult>;
   importImageFile: (file: File) => Promise<string | undefined>;
   loadDemoCharacter: () => Promise<string | undefined>;
-  activeClipId: 'idle' | 'walk' | 'ready';
-  setActiveClipId: (clip: 'idle' | 'walk' | 'ready') => void;
+  activeClipId: string;
+  setActiveClipId: (clip: string) => void;
+  selectedInstanceId: string | null;
+  setSelectedInstanceId: (id: string | null) => void;
+  selectedShotId: string | null;
+  setSelectedShotId: (id: string | null) => void;
+  loadProjectFile: (file: File) => Promise<boolean>;
 }
 
 const EditorContext = createContext<EditorContextValue | null>(null);
@@ -54,14 +61,40 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [commandRegistry] = useState(() => new CommandRegistry());
 
   const [snapshot, setSnapshot] = useState<ProjectSnapshot | null>(null);
-  const [mode, setMode] = useState<EditorMode>('setup');
+  const [mode, setMode] = useState<WorkspaceId>('draw');
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [selectedBoneId, setSelectedBoneId] = useState<string | null>(null);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
   const [currentFrame, setCurrentFrame] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [fps, setFps] = useState<number>(60);
   const [isRemoteConnected, setIsRemoteConnected] = useState<boolean>(false);
-  const [activeClipId, setActiveClipId] = useState<'idle' | 'walk' | 'ready'>('idle');
+  const [activeClipId, setActiveClipId] = useState<string>('idle');
+
+  // Synchronize instance selection with asset selection
+  const handleSelectInstance = useCallback((id: string | null) => {
+    setSelectedInstanceId(id);
+    if (id) {
+      const scene = projectState.getAllSceneData()[0];
+      const inst = scene?.instances?.find((i) => i.id === id);
+      if (inst && inst.assetId) {
+        setSelectedAssetId(inst.assetId);
+      }
+    }
+  }, [projectState]);
+
+  // Synchronize shot selection with playhead seek
+  const handleSelectShot = useCallback((id: string | null) => {
+    setSelectedShotId(id);
+    if (id) {
+      const scene = projectState.getAllSceneData()[0];
+      const shot = scene?.shots?.find((s) => s.id === id);
+      if (shot) {
+        setCurrentFrame(shot.startFrame);
+      }
+    }
+  }, [projectState]);
 
   // Initialize local command handlers & fallback project
   useEffect(() => {
@@ -293,10 +326,64 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         data: { assetId, template: 'humanoid' },
       });
 
+      // Automatically stage character on 2.5D scene
+      const sceneData = projectState.getAllSceneData()[0];
+      const sceneId = sceneData?.id ?? 'scene-default';
+      const instRes = await dispatch({
+        type: 'add_instance',
+        domain: 'scene',
+        data: {
+          sceneId,
+          assetId,
+          name: 'Hero Character',
+          position: { x: 0, y: 0 },
+          depth: 0,
+          scale: 1,
+          rotation: 0,
+        },
+      });
+      if (instRes.status === 'success' && instRes.entityId) {
+        setSelectedInstanceId(instRes.entityId);
+      }
+
       return assetId;
     }
     return undefined;
-  }, [dispatch]);
+  }, [dispatch, projectState]);
+
+  // Load a full saved project JSON file
+  const loadProjectFile = useCallback(
+    async (file: File): Promise<boolean> => {
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (data && data.manifest) {
+          if (data.assets && Array.isArray(data.assets)) {
+            for (const a of data.assets) {
+              projectState.setAssetData(a.id, a);
+            }
+          }
+          if (data.scenes && Array.isArray(data.scenes)) {
+            for (const s of data.scenes) {
+              projectState.setSceneData(s.id, s);
+            }
+          }
+          projectState.load(data.manifest);
+          projectState.incrementRevision();
+          const firstAsset = data.assets?.[0]?.id || Object.keys(data.manifest.assets || {})[0];
+          if (firstAsset) setSelectedAssetId(firstAsset);
+          const firstScene = data.scenes?.[0];
+          if (firstScene?.instances?.[0]) setSelectedInstanceId(firstScene.instances[0].id);
+          if (firstScene?.shots?.[0]) setSelectedShotId(firstScene.shots[0].id);
+          return true;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    },
+    [projectState],
+  );
 
   const getAssetData = useCallback(
     (id: string): AssetData | undefined => {
@@ -311,12 +398,18 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       commandBus,
       commandRegistry,
       snapshot,
+      workspace: mode,
+      setWorkspace: setMode,
       mode,
       setMode,
       selectedAssetId,
       setSelectedAssetId,
       selectedBoneId,
       setSelectedBoneId,
+      selectedInstanceId,
+      setSelectedInstanceId: handleSelectInstance,
+      selectedShotId,
+      setSelectedShotId: handleSelectShot,
       currentFrame,
       setCurrentFrame,
       isPlaying,
@@ -328,6 +421,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       dispatch,
       importImageFile,
       loadDemoCharacter,
+      loadProjectFile,
       activeClipId,
       setActiveClipId,
     }),
@@ -339,6 +433,10 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       mode,
       selectedAssetId,
       selectedBoneId,
+      selectedInstanceId,
+      handleSelectInstance,
+      selectedShotId,
+      handleSelectShot,
       currentFrame,
       isPlaying,
       fps,
@@ -347,6 +445,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       dispatch,
       importImageFile,
       loadDemoCharacter,
+      loadProjectFile,
       activeClipId,
     ],
   );

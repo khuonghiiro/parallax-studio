@@ -1,615 +1,310 @@
-# Parallax Studio UI Specification
+# UI specification — drawing, animation and filmmaking studio
 
-Status: Architectural specification. Describes the user interface architecture
-and interaction model derived from professional desktop animation software:
-Spine 2D, Live2D Cubism, Rive, and Moho.
+Updated 12/09/2026. Status: proposed vNext, to be implemented in milestones.
+This document replaces the two-mode Setup/Animate design. It describes target
+behavior, not confirmation that features exist or have passed acceptance in the current app.
 
-## 1. Professional Animation App Reference
+## 1. Problems and design direction
 
-### 1.1 Comparative Analysis
+The code already contains an editor and domain packages. However, at this source inspection:
+- MenuBar/ViewportPanel still use Setup/Animate; EditorContext maintains asset-oriented state.
+- Clips are selected from a fixed idle/walk/ready set; the timeline mixes asset and shot keys.
+- Export in App records the canvas for 5 seconds at 24 FPS, rather than exporting a complete sequence.
+- SceneComposer exists, but does not yet establish that users can assemble scenes, set camera paths and edit films.
 
-Industry-standard 2D/2.5D animation suites adhere to a consistent spatial layout:
+The goal is one complete creative workflow: draw a multilayer character, make a
+walk clip, place multiple instances in a multiplane environment, move the camera
+and cut the result into a film. Tools must identify whether the user is editing
+a drawing, rig, clip, instance or shot.
+Professional quality is judged by workflows that can be completed and revised,
+rather than by the number of icons or decorative effects.
 
-| Component | Spine 2D | Live2D Cubism | Rive | Moho |
+## 2. Five workspaces and document context
+
+| ID | Vietnamese / English UI label | Main object | Timeline | Next action |
 | --- | --- | --- | --- | --- |
-| Central Viewport | Yes | Yes | Yes | Yes |
-| Left Hierarchy / Tree | Hierarchy | Parts Palette | Hierarchy | Layers |
-| Right Properties / Inspector | Inspector | Inspector | Inspector | Style / Properties |
-| Bottom Timeline | Dopesheet / Graph | Timeline | Timeline | Timeline |
-| Primary Toolbar | Bottom / Left | Top | Top Strip | Left Strip |
-| Core Dual Modes | Setup / Animate | Modeling / Animation | Design / Animate | Frame 0 / Animate |
-| Panel Management | Split resize | Floating windows | Stackable tabs | Docking / Undocking |
+| draw | Vẽ & Layer / Draw | DrawingDocument, DrawingLayer, Cel | Exposure sheet | Prepare a rig or create a hand-drawn clip |
+| rig | Lưới & Xương / Rig | AssetDefinition, mesh, skeleton | Test pose, no default key recording | Create an AnimationClip |
+| animate | Diễn hoạt / Animate | Asset AnimationClip | Dopesheet + curves + cels | Place the clip in a scene |
+| compose | Dàn cảnh / Compose | Composition, AssetInstance, camera, light | Clip placement + camera path | Create a Shot |
+| edit | Dựng phim / Edit & Export | Sequence, Shot, audio, subtitle | Sequence edit | Review, render and export |
 
-### 1.2 Architectural Takeaways
+Workspaces are layouts and tools within one project, not five applications or
+five state copies. Switching workspace does not start playback, create keys or
+change assets. Multiple document tabs can reopen with their previous selection/playhead.
 
-1. **Explicit Mode Separation**: Setup (rigging/modeling) vs. Animate. Each mode
-   presents distinct toolbars, gizmos, and inspector controls without clutter.
-2. **Central Viewport Primacy**: Dominates screen real estate; hosts canvas plus
-   toggleable vector overlays (wireframe, skeleton bones, heatmaps, landmarks, pivots).
-3. **Left-to-Right Mental Model**: Select target in Left Hierarchy -> Manipulate in
-   Viewport -> Inspect/Fine-tune numeric parameters in Right Inspector.
-4. **Context-Sensitive Properties**: Inspector content mutates dynamically based on
-   selection type (Layer, Bone, Vertex, Keyframe, or Viewport).
-5. **Timeline at Bottom**: Accommodates multi-track dopesheet and spline graph editor.
-6. **Stackable Panel System**: Rive-style docking allows users to stack tabs, split
-   containers, and persist layout presets across workflow stages.
+Breadcrumbs always show Project / Asset or Composition / Clip or Shot.
+Inspector labels explicitly indicate Edit Source, Edit Instance or Edit at Time.
+Double-clicking a clip placement opens its source clip; returning to the composition
+retains the shot. Source-clip edits affect every reference: show usage counts and
+provide Duplicate/Make Unique.
 
-## 2. Overall Parallax Studio Layout
+## 3. Shared shell and layout
 
-```text
-┌────────────────────────────────────────────────────────────────┐
-│  Menu Bar   │  Mode: [Setup ▼] [Animate]  │  [Preview] [Export]│
-├─────────┬──────────────────────────────────────┬───────────────┤
-│         │                                      │               │
-│  LEFT   │           CENTRAL VIEWPORT           │    RIGHT      │
-│ PANELS  │                                      │   PANELS      │
-│         │      (Canvas + Overlays)             │               │
-│ ┌─────┐ │                                      │ ┌───────────┐ │
-│ │Hier-│ │   ┌──────────────────────────┐       │ │Properties │ │
-│ │archy│ │   │                          │       │ │           │ │
-│ │Asset│ │   │    Character Viewport    │       │ │ Transform │ │
-│ │Bone │ │   │    Overlays:             │       │ │ Rig       │ │
-│ │Layer│ │   │    • Mesh wireframe      │       │ │ Mesh      │ │
-│ └─────┘ │   │    • Bone skeleton       │       │ │ Material  │ │
-│ ┌─────┐ │   │    • Weight heatmap      │       │ │ Animation │ │
-│ │Views│ │   │    • Landmarks & pivots  │       │ └───────────┘ │
-│ │     │ │   └──────────────────────────┘       │ ┌───────────┐ │
-│ └─────┘ │                                      │ │Tool       │ │
-│         │         [Toolbar Strip]              │ │Options    │ │
-│         │                                      │ └───────────┘ │
-├─────────┴──────────────────────────────────────┴───────────────┤
-│  TIMELINE PANEL                                                │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │ Track │ ♦──────♦────♦──────────♦────♦                    │  │
-│  │ Bone  │    ♦────────♦──────♦                              │  │
-│  │ Layer │ ♦──────────────────♦                              │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│  [Dopesheet] [Graph Editor] [▶ Play] [⏹ Stop]  00:00 / 05:00  │
-├────────────────────────────────────────────────────────────────┤
-│  Status Bar: "Ready" │ FPS: 60 │ Frame: 0/300 │ GPU: 3060 OK   │
-└────────────────────────────────────────────────────────────────┘
-```
+Use continuous panels that resize and dock by region. Provide File/Edit/View/
+Animation/Scene/Render/Help menus, workspace tabs, document tabs and a labeled
+context toolbar. Library, hierarchy and inspector are distinct panels; do not
+put everything into one permanently open project tree. AI Activity is an optional
+drawer rather than occupying canvas space by default.
 
-## 3. Two Primary Operating Modes
-
-### 3.1 Setup Mode (Rigging & Preparation)
-
-Dedicated to character asset construction: importing artwork, segmenting layers,
-generating Earcut meshes, placing landmarks, auto-rigging, and painting weights.
-Equivalent to Frame 0 in Moho or Setup Mode in Spine.
-
-**Setup Mode Toolbar:**
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│ [Select] [Move] [Rotate] [Scale] │ [Mesh Edit] [Weight     │
-│                                   │  Paint] [Bone Tool]     │
-│ [Landmark] [Pivot] [Draw Order]   │ [Auto-Rig] [Template]   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-| Tool | Function | Target Command Bus Action |
+| Region | Content | Proposed size at 1920 × 1080 |
 | --- | --- | --- |
-| Select | Select bone, layer, or vertex | `editor.select` |
-| Move | Translate active element | `transform.move` |
-| Rotate | Rotate active element | `transform.rotate` |
-| Scale | Scale active element | `transform.scale` |
-| Mesh Edit | Insert/remove/translate vertices & edges | `mesh.refine` |
-| Weight Paint | Brush vertex skinning weights | `rig.set_weights` |
-| Bone Tool | Create/parent/re-order bones | `rig.add_bone` |
-| Landmark | Place/drag anatomical landmark markers | `rig.set_landmarks` |
-| Pivot | Set local layer pivot origin | `asset.set_pivot` |
-| Draw Order | Adjust 2D layer stacking order | `asset.set_draw_order` |
-| Auto-Rig | Execute Rig-Ready automatic skeleton fit | `rig.apply_rig_template` |
-| Template | Browse skeleton & landmark templates | `rig.list_rig_templates` |
+| Header | Menu, project/save status, workspace, document | 72–104 px total |
+| Left | Library or contextual hierarchy, search/filter | 240–300 px |
+| Center | Canvas/stage, short toolbar, viewer tabs | Remaining space, highest priority |
+| Right | Inspector and selection-specific Tool Options | 280–340 px |
+| Bottom | Workspace-specific timeline, transport | 220–320 px, collapsible |
+| Status | Scope, frame/timecode, preview scale, job/connection | 24–28 px |
 
-### 3.2 Animate Mode (Performance & Keyframing)
+At 1366 × 768, switch the library to a tab and the inspector to a drawer when
+needed; do not shrink text to fit every panel. At 125–200% DPI, drag handles,
+menus and timelines must not overlap. Provide Reset Layout, Focus Canvas and
+machine-local workspace persistence; layout is not serialized into film content.
 
-Dedicated to kinematic performance: manipulating bones, placing keyframes,
-fine-tuning easing splines, previewing playback, and baking animation tracks.
+Empty states offer contextual actions: New Drawing, Import Layers, New Clip,
+Add Composition, Add Shot. Unsupported tools are disabled with a reason and a
+way forward. Errors appear beside the task with Retry/Locate/Fix rather than
+only through alerts or the console.
 
-**Animate Mode Toolbar:**
+## 4. Draw — drawing and multilayer asset assembly
+
+The canvas shows document pixels, transparency/checkerboard, zoom/rotate/mirror
+view and separate references. Mirror view does not flip exported content.
+
+| Panel/tool | Required initial behavior |
+| --- | --- |
+| Brush / Eraser | Size, hardness, opacity, color, pressure curve, smoothing; mouse fallback |
+| Fill / Selection | Tolerance/contiguous, lasso/rectangle, feather, invert, transform selection |
+| Layers | Thumbnail, rename, visibility, solo, lock, alpha lock, opacity, group, mask |
+| Import | Layered PNG sets/sequences; supported PSD subset with unsupported-content reporting |
+| Assembly | Move/rotate/scale, pivot, snap, align, parent/group, preserve offsets when reparenting |
+| Palette | Project swatches and recent colors, not only a color picker |
+| Exposure sheet | New blank cel, duplicate cel, hold, split hold, insert/delete frame, loop range |
+| Onion skin | Before/after by distinct cels, count and opacity/tint; optional layer exclusion |
+
+Users do not need meshes/bones for frame-by-frame drawing. Painting a layer held
+across frames must show which frames share the cel; offer Make Unique before
+drawing differently at one frame. Deleting an exposure differs from deleting its
+source cel. One stroke is one undo; pen cancellation or capture loss must not
+commit an incomplete stroke. Do not send every pointer sample as an HTTP command.
+
+The initial version prioritizes raster; SVG import preserves source and provides
+a rasterization preview. A full vector path editor, vector booleans and a
+Krita-equivalent brush engine are later extensions. Do not advertise a vector
+editor when only a few shapes exist.
+Brush presets/raster export must produce recoverable results; persist suitable
+deltas/tiles and snapshots rather than capturing the whole 4K canvas for every stroke.
+
+Asset assembly includes joint checks for overlap, pivot, layer order and gaps.
+Each layer selects None, Rigid Cutout or Deformable Mesh. Static props need no rig.
+Hand-drawn clips can combine rigs with mouth-substitution cels; binding must be
+compatible, or use rigid binding for cels with different silhouettes/topology.
+
+## 5. Rig — meshes, bones and deformation validation
+
+The workflow has explicit states: Artwork → Mesh → Skeleton → Bind → Validate.
+Allow returning to each stage; do not force experts through a sequential wizard.
+Left: layer/mesh/bone tabs. Center: asset in rest pose. Right: mesh settings,
+weights or bone constraints. Bottom: pose-test presets and unresolved issues.
+
+| Stage | Tools and feedback |
+| --- | --- |
+| Auto mesh | Alpha threshold, contour tolerance, margin, density/joint zones; preview before Apply |
+| Manual mesh | Vertex/edge/face select, add/move/delete, split edge, constrained edge, local retriangulate |
+| Diagnostics | Holes/islands, crossings, zero-area, UV stretch, unweighted vertices; click issues to focus |
+| Skeleton | Template + editable landmarks, add/reparent bone, pivot/rest transforms, FK/IK |
+| Weights | Bone selection, numerically scaled heatmap, add/subtract/smooth, normalize, lock influence |
+| Test pose | Bend/rotate within limits, extreme poses, rest/deformed comparison, Reset Test Pose |
+
+Generated meshes must preserve gaps such as arm/torso separation, disconnected
+islands and UVs matching image bounds. More vertices do not guarantee quality:
+criteria are silhouette preservation, no flipped triangles, no joint tearing and
+controllable deformation. Do not promise automatic rigging of every animal.
+Regenerate/replace source shows affected bindings/clips; create a new revision,
+preview transfer/rebind and allow cancellation. Never silently discard weights/keys.
+Test poses are session previews; only Bake to Clip creates durable keys.
+See [Auto Rig](AUTO_RIG.md) and [Image Workflow](IMAGE_WORKFLOW.md).
+
+## 6. Animate — dedicated asset animation
+
+Open assets in a dedicated studio with optional reference backgrounds/cameras
+and a clip browser. Provide New/Duplicate/Rename/Delete clip, duration, authored
+FPS, loop, markers and thumbnails. Do not restrict animation to idle/walk/ready.
+Clips are reusable across instances.
+
+The timeline has three views of the same data:
+- Dopesheet: bone/layer/deformer channels; box-select, move/copy/paste keys, snapping.
+- Graph: numeric channels, tangents, easing, stepped/linear/Bezier, selected-channel filtering.
+- Exposure: cel rows, holds and drawing substitutions; edit in Draw at the current frame.
+
+Provide play, pause, frame step, previous/next key, work range and separate scratch audio.
+Auto-key defaults off; enabling it displays a clear banner/indicator. When off,
+trial poses are not saved automatically; show Set Key or Reset beside the action.
+Only channels that actually changed are keyed.
+Key diamonds distinguish none/key here/animated elsewhere/modified beyond color alone.
+
+Support blocking poses, breakdowns, timing, inbetweens, squash/stretch, views/
+expressions, root-motion policy and clip-loop seam previews. Ghosting samples
+poses in time rather than copying screenshots of the entire editor. Retiming keeps
+cel exposures stepped, without interpolating drawings unless the user explicitly
+selects a supported effect.
+An asset walk clip uses local coordinates; scene travel belongs to the instance
+or explicitly selected root motion, preventing double application of movement.
+
+## 7. Compose — multilayer staging and cameras
+
+This is the 2.5D filmmaking assembly space, distinct from the asset editor.
+Dragging assets/clips/backgrounds from Library onto the stage creates instances
+with separate IDs rather than editing source assets.
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│ [Select] [Move] [Rotate] │ [Key ♦] [Auto-Key] [Templates]  │
-│                           │                                  │
-│ [Onion Skin] [Preview]    │ [Graph] [Dopesheet]              │
-└─────────────────────────────────────────────────────────────┘
+Project / Forest / Shot 02          Draw Rig Animate [Compose] Edit
+Library + Scene Tree | Stage Perspective / Top / Side | Inspector
+                    | Depth planes + camera path     | Instance
+                    |--------------------------------| Camera
+                    | Final Camera View              | Light
+Composition timeline: instances / clips / camera / light / markers
 ```
 
-| Tool | Function | Target Command Bus Action |
+Two simultaneous viewers: Stage for arranging layers/cameras and Camera View
+for checking the final frame. Perspective/Top/Side expose depth planes; camera
+gizmos/frustums/paths remain distinct from editor navigation. Viewer pan/zoom
+does not create camera keys.
+Pilot Camera has an explicit indicator; it records the camera only when enabled
+with Auto-key in the correct context.
+
+Scene Tree contains groups/pegs, background planes, character instances, props,
+effects, cameras, lights and shadow receivers. Reordering within one plane
+changes draw order; Z depth is a separate property. Provide lock, solo, selectable,
+search and filters. Include Enter Group/Edit Source/Make Unique; prevent parent cycles.
+
+| Operation | Visible result |
+| --- | --- |
+| Drag a clip from Library | Select a compatible instance or create one, place ClipPlacement at playhead |
+| Duplicate instance | Shared clip/source; independent transform/time offset |
+| Place a background | Full image bounds with explicit crop/fit; no default stretching |
+| Adjust depth | Plane gizmo and Camera View update; Keep Framing available when changing Z |
+| Move/rotate/scale | Local/world mode, pivot and numeric input, snap/grid |
+| Key camera | Pan, dolly, zoom/FOV, rotation, target; path, key handles and easing |
+| Add light/receiver | Intensity/color, shadow softness/bias, alpha silhouette, contact check |
+| Clip timing | Trim, slip, repeat, speed, blend only compatible channels |
+| Camera switch | Each shot selects a camera; cuts do not accidentally blend cameras |
+
+Actual multiplane parallax uses perspective and depth. Orthographic is a flat
+mode without automatic depth scaling; artistic parallax is a named effect and
+must not be added again over perspective. Keep Framing compensates size only at
+the reference frame and must offer a preview when the camera is moving.
+Canvas aspect changes display crop/safe frames without automatically altering
+camera keys. DOF/motion blur/volumetrics are outside baseline acceptance and are
+enabled only when the runtime supports them.
+
+## 8. Edit & Export — complete sequence editing
+
+Sequence bin contains shots/thumbnails/status. Its viewer shows the edited cut,
+rather than the asset selected in another workspace. The timeline has multiple tracks:
+- Shot track: reorder, trim, split, ripple toggle, visible gaps.
+- Audio tracks: dialogue/music/SFX, waveform, gain/fade/mute and A/V sync.
+- Subtitle track: text, timing, safe area, font fallback; supported format import/export.
+- Markers: scene beats, review notes, missing assets.
+
+Double-clicking a shot opens Compose at the correct camera and time. Clips and
+compositions retain local time; sequence placements map time according to
+[Project Format](PROJECT_FORMAT.md).
+Cuts come first; cross-dissolve renders both actual shots. Unsupported transitions
+are disabled. Do not derive durations through ambiguous floating-point addition.
+
+Render Queue displays Sequence/Shot/Range, output path, actual dimensions, FPS,
+codec, quality, audio and preflight validation before Start. Include snapshot
+revision, actual progress, cancel/retry, accessible logs and completed-file links.
+Renderer loss becomes waiting_renderer; failed jobs never display Done. Preview
+resolution may decrease, but export must not silently reduce quality or record
+wall-clock canvas playback.
+[Render Profiles](RENDER_PROFILES.md) defines 2K/4K, 60/120 FPS and frame verification.
+
+## 9. Contextual AI Activity and MCP
+
+The drawer shows connected client/session/project, revision, supported capabilities,
+AI preparing/running/waiting/failed status and the object being edited.
+Each task has a readable summary, target, progress, artifacts and retry/cancel.
+Optional target highlight/focus follows user preference; AI must not steal selection
+while the user draws.
+
+AI workflow: read library and scene context → prepare shot plan → report missing
+assets → create/import actual images → assemble assets/clips/shots → render real
+previews → revise → export.
+Review large changes by batch; do not require approval for every step already assigned.
+UI Generate prepares a brief/handoff; without a connected image-generation tool,
+show Waiting for image client rather than pretending a model was called.
+
+MCP and UI share film-data commands; not every UI click becomes a tool.
+Selection/layout/playback are session state; validation/preview are queries/jobs.
+Conflicts show revision and refresh/reapply guidance; retries do not duplicate assets/shots.
+Provide Copy Connection Diagnostics, reconnect and Codex/Antigravity setup guidance.
+[Command Bus](COMMAND_BUS.md) and [MCP Tools](MCP_TOOLS.md) own detailed contracts.
+
+## 10. Interaction language and design system
+
+Use neutral backgrounds and typography/borders/spacing for hierarchy, accents for
+selection/focus and warning colors for errors. Do not use glow/gradient/cards on
+every panel. Reuse and consolidate existing components/tokens rather than changing
+frameworks just to reskin the app.
+
+- UI text 13–14 px, small labels at least 12 px, tabular digits for frame numbers.
+- Controls 28–32 px tall, desktop hit areas at least 28 px; stylus preset 36–44 px.
+- Spacing 4/8/12/16, control radius 3–6 px; clear dividers and visible focus rings.
+- Consistent Lucide + custom SVG; icons 16–20 px with name/function/shortcut tooltips.
+- Main toolbars use icons and labels; secondary tool groups are named, not icon mazes.
+- Readable text contrast target 4.5:1; states include text/shapes beyond color.
+- Vietnamese/English use message keys; widths are not hardcoded for English text.
+
+Shortcuts use a contextual, customizable command registry:
+Ctrl+S save, Ctrl+O open, Ctrl+Z undo, Ctrl+Shift+Z redo, Ctrl+A select all;
+do not take Ctrl+P for pivot or Ctrl+W for weight overlays.
+B brush, E eraser, V select, Space play when timeline has focus; hold Space to
+pan when canvas has focus. Do not capture shortcuts during text entry.
+Overlay controls live in View/Overlays, menus and Command Search; every core
+action has a mouse-accessible route.
+
+## 11. Performance, reliability and continuity
+
+Use artwork caches/tiles, incremental dirty-region uploads and virtualized layer/
+track rows; do not rebuild the whole scene per pointer event. Clearly badge preview
+resolution. Stroke-feedback target is p95 below 33 ms in a recorded fixture;
+preview target is 60 FPS, with 120 only when measured. Record CPU/RAM/driver/document
+size rather than inferring performance from RTX 3060.
+
+Save source and revision with visible autosave/recovery; missing files offer Relink
+instead of displaying blank layers as valid content. Do not report Saved after
+quota/I/O failure. Panel resizing, workspace switching and disconnection must not
+lose committed strokes.
+Users can pause AI edits, continue manually and undo at the correct scope.
+
+## 12. Acceptance before calling the studio usable
+
+| ID | Scenario | Pass condition |
 | --- | --- | --- |
-| Select | Select bones or keyframes | `editor.select` |
-| Move | Translate bone pose | `animation.set_keyframe` |
-| Rotate | Rotate bone pose | `animation.set_keyframe` |
-| Key ♦ | Explicitly insert keyframe at playhead | `animation.set_keyframe` |
-| Auto-Key | Automatically key modified transforms | `animation.set_keyframe` |
-| Templates | Apply motion cycle presets (walk, idle) | `animation.apply_template` |
-| Onion Skin | Toggle ghost preview of adjacent frames | `editor.toggle_onion_skin` |
-| Preview | Trigger real-time viewport playback | `animation.preview_frame` |
-| Graph | Switch to bezier curve spline editor | `editor.switch_view_mode` |
-| Dopesheet | Switch to keyframe dopesheet view | `editor.switch_view_mode` |
-
-## 4. Panel Layout Specifications
-
-### 4.1 Hierarchy Panel (Left)
-
-Displays a tree representation of the active scene graph, viewports, and assets:
-
-```text
-┌─ Hierarchy ─────────────────┐
-│ 🔍 Search hierarchy...      │
-│                             │
-│ ▼ 📁 Project: "Ronin Duel"  │
-│   ▼ 👤 Character: "Ninja"   │
-│     ▼ 🖼 Views              │
-│       📷 front [Active]     │
-│       📷 quarter-left       │
-│     ▼ 📄 Layers (front)     │
-│       🔲 head         [z:7] │
-│       🔲 torso        [z:3] │
-│       🔲 left-arm     [z:6] │
-│       🔲 right-arm    [z:1] │
-│       🔲 left-leg     [z:5] │
-│       🔲 right-leg    [z:2] │
-│       🔲 pelvis       [z:4] │
-│     ▼ 🦴 Skeleton           │
-│       🦴 root               │
-│         🦴 spine            │
-│           🦴 head           │
-│           🦴 left_clavicle  │
-│             🦴 left_arm     │
-│     ▼ 🎬 Animations         │
-│       🎬 idle-breath        │
-│       🎬 sprint-cycle       │
-└─────────────────────────────┘
-```
-
-### 4.2 Properties Panel (Right Inspector)
-
-Context-sensitive panel displaying properties for selected entities:
-
-**When Layer is Selected:**
-```text
-┌─ Properties: head ──────────┐
-│ Name: [head            ]    │
-│ Visible: [✓]  Locked: [ ]   │
-│ Draw Order: [7        ]     │
-│ Opacity: [100%     ] ░░░░█  │
-│                             │
-│ ── Mesh Geometry ──         │
-│ Vertices: 245               │
-│ Triangles: 438              │
-│ [Edit Mesh] [Auto-Generate] │
-│                             │
-│ ── Pivot Offset ──          │
-│ X: [512.0]  Y: [280.0]      │
-│ [Reset to Bounding Center]  │
-│                             │
-│ ── Texture Source ──        │
-│ Size: 1024 × 1024 px        │
-│ Alpha Integrity: Clean ✅   │
-│ [Replace Asset Image]       │
-└─────────────────────────────┘
-```
-
-**When Bone is Selected:**
-```text
-┌─ Properties: left_arm ──────┐
-│ Name: [left_arm        ]    │
-│ Parent Bone: left_clavicle  │
-│ Length: [85.0 px]           │
-│ Local Rotation: [0.0°]      │
-│                             │
-│ ── Skin Weights ──          │
-│ Bound Layer: left-arm       │
-│ Influence Radius: [40.0 px] │
-│ Falloff: [Gaussian ▼]       │
-│ [Paint Weights]             │
-│                             │
-│ ── Kinematics ──            │
-│ Constraint: [2-Bone IK ▼]   │
-│ IK Target: bone_left_wrist  │
-│ Pole Target: (none)         │
-│                             │
-│ ── Anatomical Landmarks ──  │
-│ Joint Head: (420, 320)      │
-│ Joint Tail: (380, 480)      │
-│ [Snap to Landmark Point]    │
-└─────────────────────────────┘
-```
-
-**When Keyframe is Selected:**
-```text
-┌─ Properties: Keyframe ──────┐
-│ Time: [0.250 s] (Frame 15)  │
-│ Target: left_arm.rotation   │
-│                             │
-│ ── Transform Value ──       │
-│ Angle: [-30.0°]             │
-│                             │
-│ ── Interpolation Spline ──  │
-│ Easing: [Cubic Bezier ▼]    │
-│ Preset: [Ease In-Out]       │
-│ In-Tangent:  [-0.15, 0.0]   │
-│ Out-Tangent: [ 0.15, 0.0]   │
-└─────────────────────────────┘
-```
-
-### 4.3 Tool Options Panel (Bottom-Right)
-
-Controls active tool parameters:
-
-**Weight Paint Mode Active:**
-```text
-┌─ Weight Paint Options ──────┐
-│ Brush Size: [20 px]         │
-│ Strength:   [0.50]   ░░█░░  │
-│ Falloff:    [Smooth ▼]      │
-│ Mode: [Paint ▼]             │
-│   • Paint (Additive)        │
-│   • Erase (Subtractive)     │
-│   • Smooth (Laplacian)      │
-│   • Blur (Gaussian kernel)  │
-│                             │
-│ Active Bone: left_arm       │
-│ Heatmap Overlay: [✓] Active │
-│ [Auto-Weights] [Normalize]  │
-└─────────────────────────────┘
-```
-
-**Mesh Edit Mode Active:**
-```text
-┌─ Mesh Edit Options ─────────┐
-│ Edit Target: [Vertex ▼]     │
-│   • Vertex (Translate/Add)  │
-│   • Edge (Split/Collapse)   │
-│   • Face (Subdivide)        │
-│                             │
-│ Operations:                 │
-│ [Add Vertex] [Delete Vert]  │
-│ [Add Edge Loop] [Subdivide] │
-│ Target Density: [Medium ▼]  │
-│ [Triangulate (Earcut)]      │
-│ Mesh Stats: 245V / 438T     │
-└─────────────────────────────┘
-```
-
-### 4.4 Timeline Panel (Bottom)
-
-Multi-track scrubber with keyframe dopesheet and spline editor toggles:
-
-```text
-┌─ Timeline ──────────────────────────────────────────────────┐
-│ Clip: [run-cycle ▼]  Duration: 1.00s  FPS: 60  Loop: [✓]   │
-├──────────┬──────────────────────────────────────────────────┤
-│ Track    │ 0.0   0.25   0.5   0.75   1.0                   │
-│          │ |      |      |      |      |                    │
-│ ▼ root   │ ♦──────♦──────♦──────♦──────♦                    │
-│   rot    │ 0°     2°     0°    -2°     0°                   │
-│   pos.y  │ 0      5      0      5      0                    │
-│ ▼ l_arm  │ ♦─────────────♦─────────────♦                    │
-│   rot    │ -45°          35°          -45°                  │
-│ ▼ r_arm  │ ♦─────────────♦─────────────♦                    │
-│   rot    │ 35°          -45°           35°                  │
-├──────────┴──────────────────────────────────────────────────┤
-│ [⏮] [◀◀] [▶ Play] [⏹] [▶▶] [⏭] │ 🔑 Auto-Key: [ON] │ 00:15/01:00│
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 4.5 Perspective Views Panel (Bottom-Left)
-
-Manages multi-angle character reference textures for 2.5D visual continuity:
-
-```text
-┌─ Views Panel ───────────────┐
-│ Active View: front          │
-│                             │
-│ ┌─────┐ ┌─────┐ ┌─────┐    │
-│ │front│ │qtr-L│ │qtr-R│    │
-│ │ [✓] │ │ [✓] │ │ [ ] │    │
-│ └─────┘ └─────┘ └─────┘    │
-│ ┌─────┐ ┌─────┐ ┌─────┐    │
-│ │sideL│ │back │ │sideR│    │
-│ │ [ ] │ │ [ ] │ │ [ ] │    │
-│ └─────┘ └─────┘ └─────┘    │
-│                             │
-│ [Add Perspective] [Check]   │
-└─────────────────────────────┘
-```
-
-## 5. Viewport Vector Overlays
-
-Viewport overlays provide visual debugging and editing handles directly above
-the rendered Three.js canvas. Overlays are toggled via hotkey or overlay toolbar:
-
-```text
-┌─ Viewport Overlays ───────────────────────┐
-│ [✓] Mesh Wireframe    (Ctrl+M)            │
-│ [✓] Bone Skeleton     (Ctrl+B)            │
-│ [ ] Weight Heatmap    (Ctrl+W)            │
-│ [ ] Landmarks         (Ctrl+L)            │
-│ [✓] Pivot Points      (Ctrl+P)            │
-│ [ ] Onion Skin        (Ctrl+O)            │
-│ [ ] Safe Area Bounds  (Ctrl+A)            │
-│ [ ] Alignment Grid    (Ctrl+G)            │
-└───────────────────────────────────────────┘
-```
-
-**Weight Heatmap Representation:**
-- **Red (`#FF3B30`)**: Weight = 1.0 (Full influence by active bone).
-- **Yellow (`#FFCC00`)**: Weight = 0.5 (Shared influence between adjacent bones).
-- **Blue (`#007AFF`)**: Weight = 0.0 (Zero influence).
-
-## 6. MCP Integration: AI Understanding and UI Synchronization
-
-### 6.1 Architectural Principle: Unified Command Bus
-
-```mermaid
-flowchart LR
-  UI["Desktop UI (Pointer, Input)"] --> CMD["Application Command Bus"]
-  MCP["MCP Tool Server (AI Agent)"] --> CMD
-  CMD --> STATE["Single Application State"]
-  STATE --> UI
-  STATE --> MCP
-```
-
-All interactions—whether triggered by a user click or an AI agent calling an MCP
-tool—execute via the exact same Command Bus handlers. When an AI agent executes
-`rig.set_landmarks`, the state updates and the viewport immediately renders the
-updated marker pins.
-
-### 6.2 Semantic UI Element IDs
-
-To allow AI agents and automation scripts to interact deterministically with the
-user interface, interactive elements implement standardized semantic IDs:
-
-| UI Element | Semantic Element ID | Underlying Command |
-| --- | --- | --- |
-| Auto-Rig Action Button | `btn-auto-rig` | `rig.apply_rig_template` |
-| Mesh Edit Mode Toggle | `tool-mesh-edit` | `mesh.refine` |
-| Weight Paint Tool Toggle | `tool-weight-paint` | `rig.set_weights` |
-| Landmark Marker Handle | `landmark-{name}` | `rig.set_landmarks` |
-| Hierarchy Bone Item | `bone-{bone_id}` | `rig.get_hierarchy` |
-| Keyframe Scrubber Node | `kf-{track}-{timestamp}` | `animation.set_keyframe` |
-| Viewport Playhead Toggle | `btn-play` | `animation.preview_frame` |
-| Export Video Action | `btn-export` | `export.start_job` |
-| Rig Template Selector | `select-rig-template` | `rig.list_rig_templates` |
-| View Angle Thumbnail | `view-{view_id}` | `asset.attach_view` |
-
-### 6.3 Bidirectional State Flow
-
-| User / Agent Action | UI Reaction | MCP / Agent State Reaction |
-| --- | --- | --- |
-| User drags landmark pin | Viewport updates handle, skeleton adapts | State update emitted, agent observes new coords |
-| Agent invokes `mesh.generate` | Viewport paints wireframe mesh overlay | State updated, agent receives vertex stats |
-| User paints skin weight brush | Heatmap reflects real-time gradient | State updated, normalized weights recorded |
-| Agent invokes `animation.apply_template` | Timeline generates keyframe track | State updated, playback immediately available |
-| User clicks Auto-Rig | Viewport renders landmarks + skeleton | Same command sequence runs as MCP invocation |
-| Agent invokes `export.start_job` | Modal shows render progress bar | Job progress reported via MCP polling |
-
-## 7. Workflow-Specific Interaction Sequences
-
-### 7.1 Import to Auto-Rig Sequence (Setup Mode)
-
-```text
-Step 1: Ingestion                 Step 2: Template Selection
-┌──────────────────────┐          ┌──────────────────────┐
-│ [Import Image]       │          │ Select Rig Template: │
-│                      │    →     │                      │
-│  📁 Select PNG...    │          │ ◉ Humanoid T-Pose    │
-│  or Drag & Drop      │          │ ○ Humanoid A-Pose    │
-│                      │          │ ○ Chibi Character    │
-│  [AI Generate ✨]    │          │ ○ Quadruped Animal   │
-│  Prompt: [........]  │          │ [Apply Template]     │
-└──────────────────────┘          └──────────────────────┘
-           ↓                                 ↓
-Step 3: Layer Separation          Step 4: Auto-Rig Evaluation
-┌──────────────────────┐          ┌──────────────────────┐
-│ Segmenting Layers... │          │ ✅ Landmarks Placed  │
-│                      │    →     │ ✅ 15 Bones Bound    │
-│  ✅ head             │          │ ✅ Initial Weights   │
-│  ✅ torso            │          │                      │
-│  ✅ left_arm         │          │ ⚠ Left elbow offset  │
-│  ✅ right_arm        │          │   by 4px detected    │
-│  ✅ left_leg         │          │                      │
-│  ✅ right_leg        │          │ [Fine-Tune Pins]     │
-│  [Confirm Layers]    │          │ [Accept Rig]         │
-└──────────────────────┘          └──────────────────────┘
-```
-
-### 7.2 Mesh Editing Sequence
-
-- Hover vertex: Highlights with amber halo (`#F5A623`).
-- Click vertex: Selects vertex with cyan ring (`#50E3C2`).
-- Drag vertex: Translates position with real-time UV texture warping.
-- `Ctrl + Click`: Multi-selects vertices for group translation.
-- `Del` key: Removes selected vertex and re-triangulates via Earcut.
-
-### 7.3 Weight Painting Sequence
-
-- `Left-Click + Drag`: Paints positive weight influence for the active bone.
-- `Right-Click + Drag`: Erases (subtracts) weight influence.
-- `Shift + Click`: Smooths weight boundary via Laplacian neighbor averaging.
-- `Mouse Wheel`: Adjusts brush radius interactively.
-
-### 7.4 Animation & Curve Editing
-
-- Scrubber drag: Updates Three.js deformation pipeline to target timestamp.
-- Click bone gizmo + drag: Rotates bone and generates keyframe if Auto-Key is active.
-- Graph Editor handles: Manipulates cubic bezier tangents for velocity easing.
-
-## 8. Keyboard Shortcuts
-
-| Shortcut | Action | Scope |
-| --- | --- | --- |
-| `Tab` | Toggle Setup Mode ↔ Animate Mode | Global |
-| `V` | Pointer Selection Tool | Viewport |
-| `G` | Translate / Grab Active Element | Viewport |
-| `R` | Rotate Active Element | Viewport |
-| `S` | Scale Active Element | Viewport |
-| `E` | Mesh Editing Mode | Setup Mode |
-| `W` | Weight Painting Mode | Setup Mode |
-| `B` | Bone Tool | Setup Mode |
-| `L` | Landmark Placement Tool | Setup Mode |
-| `K` | Insert Keyframe at Playhead | Animate Mode |
-| `Space` | Play / Pause Playhead | Animate Mode |
-| `Ctrl + Z` | Undo Command | Global |
-| `Ctrl + Shift + Z` | Redo Command | Global |
-| `Ctrl + M` | Toggle Mesh Wireframe Overlay | Viewport |
-| `Ctrl + B` | Toggle Skeleton Bone Overlay | Viewport |
-| `Ctrl + W` | Toggle Weight Heatmap Overlay | Viewport |
-| `Ctrl + K` | Quick Command Palette Search | Global |
-
-## 9. Responsive Layout Presets
-
-Panels can be dragged, nested as stacked tabs, collapsed, or resized.
-
-| Workspace Preset | Primary Visible Panels | Target Workflow |
-| --- | --- | --- |
-| `Default` | Hierarchy (L), Properties (R), Timeline (B) | General editing |
-| `Rigging` | Hierarchy + Views (L), Properties + Weight Tools (R) | Auto-rig & skinning |
-| `Animation` | Compact Hierarchy (L), Timeline + Graph Editor (B) | Keyframe choreography |
-| `Preview` | Viewport maximized, panels hidden | Cinematic review |
-| `Export` | Viewport + Encoding Profiles + Render Queue | Video output |
-
-## 10. Component to Command Mapping
-
-| UI Component | User Action | Command Bus Handler | Associated MCP Tool |
-| --- | --- | --- | --- |
-| Import Button | Click -> File Dialog | `asset.import_image` | `asset.import_image` |
-| AI Generate Button | Click -> Prompt Modal | `asset.prepare_image_brief` | `asset.prepare_image_brief` |
-| Hierarchy Layer Item | Click | `editor.select` | (Internal selection) |
-| Layer Reorder Drag | Drag up/down | `asset.set_draw_order` | `asset.set_draw_order` |
-| Mesh Vertex Drag | Drag in viewport | `mesh.refine` | `mesh.refine` |
-| Auto-Generate Mesh | Click | `mesh.generate` | `mesh.generate` |
-| Landmark Marker Drag | Drag pin handle | `rig.adjust_landmark` | `rig.adjust_landmark` |
-| Auto-Rig Execute | Click | `rig.apply_rig_template` | `rig.apply_rig_template` |
-| Viewport Bone Rotate | Drag rotate handle | `rig.test_pose` | `rig.test_pose` |
-| Weight Brush Stroke | Paint on mesh | `rig.set_weights` | `rig.set_weights` |
-| Keyframe Diamond Drag | Drag on timeline track | `animation.set_keyframe` | `animation.set_keyframe` |
-| Motion Template Pick | Select preset | `animation.apply_template` | `animation.apply_template` |
-| Playback Button | Click ▶ | `animation.preview_frame` | `animation.preview_frame` |
-| Export Job Button | Click | `export.start_job` | `export.start_job` |
-| Perspective View Click | Select thumbnail | `editor.switch_view` | `asset.attach_view` |
-
-## 11. Iconography System
-
-### 11.1 Anti-AI-Slop & Consistency Principles
-
-- **No OS-Native Icons**: Prohibit Segoe MDL2 (Windows) and SF Symbols (macOS)
-  because they diverge across platforms and create inconsistent visual weights.
-- **Strictly No Emojis**: Emojis are OS-dependent and unprofessional in desktop software.
-- **Icon Resolution Priority**:
-  1. Primary: Use curated open-source icon library (Lucide Icons).
-  2. Fallback: Generate bespoke inline SVG adhering to the exact Lucide specification.
-
-### 11.2 Recommended Library: Lucide Icons
-
-- **License**: ISC (Permissive, open commercial use).
-- **Style**: Vector outline, 24×24 viewBox, 2px stroke width, rounded caps and joins.
-- **Customization**: Adapts dynamically via `currentColor` and CSS size variables.
-- **Tree-Shaking**: Imports only referenced icons.
-
-### 11.3 Icon Catalog
-
-#### Setup Mode Toolbar
-| Tool | Lucide Icon | Outline Description | Custom SVG Fallback |
-| --- | --- | --- | --- |
-| Select | `MousePointer2` | Standard directional cursor | — |
-| Move | `Move` | 4-way translation arrows | — |
-| Rotate | `RotateCcw` | Circular rotation arrow | — |
-| Scale | `Maximize2` | Opposing corner expanders | — |
-| Mesh Edit | `Pentagon` | Closed geometric polygon | Triangle mesh wireframe |
-| Weight Paint | `Paintbrush` | Angled bristled brush | — |
-| Bone Tool | `Bone` | Anatomical bone outline | — |
-| Landmark | `MapPin` | Pinpoint marker | — |
-| Pivot Origin | `Crosshair` | Centered reticle | — |
-| Draw Order | `Layers` | Stacked planar layers | — |
-| Auto-Rig | `Wand2` | Magic wand with star | Skeleton + sparkle glyph |
-| Rig Template | `LayoutTemplate` | Structured wireframe layout | — |
-
-#### Animate Mode Toolbar
-| Tool | Lucide Icon | Outline Description | Custom SVG Fallback |
-| --- | --- | --- | --- |
-| Keyframe | `Diamond` | Rhombus keyframe marker | — |
-| Auto-Key | `KeyRound` | Circular head key glyph | Diamond + "A" subscript |
-| Motion Library | `Library` | Standing book shelf | — |
-| Onion Skin | `GalleryVertical` | Stacked translucent frames | Overlapping ghost frames |
-| Playback | `Play` | Directional playback triangle | — |
-| Graph Editor | `LineChart` | Multi-node bezier spline | — |
-| Dopesheet | `BarChart3` | Horizontal timing bars | — |
-
-#### General Header, Status, and Controls
-| Control | Lucide Icon | Function |
-| --- | --- | --- |
-| Undo / Redo | `Undo2` / `Redo2` | History traversal |
-| Save Project | `Save` | Disk serialization |
-| Export Video | `Download` | Render queue initiation |
-| Import Asset | `Upload` | Image asset ingestion |
-| AI Generation | `Sparkles` | Generative image prompt modal |
-| Settings | `Settings` | System preferences |
-| Search Filter | `Search` | Hierarchy & command search |
-| Visibility | `Eye` / `EyeOff` | Layer/bone visibility toggle |
-| Lock State | `Lock` / `Unlock` | Edit protection lock |
-
-### 11.4 Bespoke Inline SVG Guidelines
-
-When specialized animation operations lack a corresponding Lucide glyph, code
-inline SVGs conforming to the following template:
-
-```xml
-<svg xmlns="http://www.w3.org/2000/svg"
-     width="24" height="24"
-     viewBox="0 0 24 24"
-     fill="none"
-     stroke="currentColor"
-     stroke-width="2"
-     stroke-linecap="round"
-     stroke-linejoin="round">
-  <!-- Geometry paths only. No embedded text or raster images. -->
-</svg>
-```
-
-**Bespoke Example: Auto-Rig Glyph (Skeleton with Generative Sparkle)**
-```xml
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="12" cy="4" r="2"/>
-  <line x1="12" y1="6" x2="12" y2="14"/>
-  <line x1="12" y1="8" x2="8" y2="12"/>
-  <line x1="12" y1="8" x2="16" y2="12"/>
-  <line x1="12" y1="14" x2="9" y2="20"/>
-  <line x1="12" y1="14" x2="15" y2="20"/>
-  <line x1="19" y1="2" x2="19" y2="6"/>
-  <line x1="17" y1="4" x2="21" y2="4"/>
-</svg>
-```
-
-### 11.5 CSS Design Tokens for Icons
-
-```css
-:root {
-  --icon-sm: 16px;
-  --icon-md: 20px;
-  --icon-lg: 24px;
-  --icon-xl: 32px;
-  --icon-stroke-width: 2px;
-  --icon-stroke-width-thin: 1.5px;
-  --icon-color-default: currentColor;
-  --icon-color-active: var(--accent);
-  --icon-color-muted: var(--muted);
-  --icon-color-danger: var(--destructive);
-}
-```
-
-## 12. Cross-References
-
-- [PLAN.md](PLAN.md) — Product roadmap and development milestones
-- [COMMAND_BUS.md](COMMAND_BUS.md) — Command dispatch, undo/redo, and transactions
-- [MCP_TOOLS.md](MCP_TOOLS.md) — MCP tools corresponding to UI actions
-- [MODULE_MAP.md](MODULE_MAP.md) — `apps/editor/` package architecture
-- [AUTO_RIG.md](AUTO_RIG.md) — Mixamo-style auto-rig specifications
-- [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) — AI image creation and part decomposition
-- [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) — Viewport Three.js render pipeline
+| UX-01 | Create a 6-layer drawing, draw 12 cels, hold each for 2 frames at 24 FPS | Correct onion skin, hold-edit scope warning, undo/reopen preserve strokes |
+| UX-02 | Assemble arm/torso/prop, auto mesh with holes and manually edit vertices | Undistorted UVs; correct pivots/overlap; rigid and deformable work together |
+| UX-03 | Create a 1-second walk and blink, duplicate and edit a clip | Source clip unchanged; Auto-key off creates no keys; loop seams inspectable |
+| UX-04 | Assemble 8 planes and 2 instances sharing the walk in a forest | Clear depth/order, one time-offset instance; source asset is not moved |
+| UX-05 | Create a 5-second camera pan/dolly, edit the path in Side View | Final Camera View shows parallax; editor pan does not alter the camera |
+| UX-06 | Edit 3 shots/15 seconds with music and subtitles | Trim/split/undo, frame-accurate cuts, reopening preserves all references |
+| UX-07 | AI adds a shot while user edits an asset, disconnect then retry | Clear conflicts/recovery, no duplicates or divergent states |
+| UX-08 | Export a 2-second 4K sequence at 60 and 120 FPS | Actual 120/240 frames, correct cel holds/camera samples and audio sync |
+| UX-09 | A newcomer completes UX-01→06 through UI | No JSON/source editing, no internal tool names required, no dead buttons |
+| UX-10 | 1366 × 768 and 1920 × 1080, DPI 125/200%, keyboard/stylus | No panels obscure critical tools; reliable focus and drag interactions |
+
+Every step has video/screenshots and a reopenable sample project. Paper plans,
+mockups or isolated unit tests do not establish the complete workflow experience.
+
+## 13. Implementation order and references
+
+Order and scope limits are in [Plan](PLAN.md); technical acceptance is in
+[Testing Strategy](TESTING_STRATEGY.md). Build a Draw→Animate→Compose→Edit vertical
+slice with simple assets before adding many effects. Fix mesh/rig and MCP through
+dedicated fixtures, then connect them to the same slice.
+
+Interaction references do not require another application's runtime or license:
+- [Krita Animation Timeline](https://docs.krita.org/en/reference_manual/dockers/animation_timeline.html): cels, exposures, onion skin.
+- [Harmony Multiplane](https://docs.toonboom.com/help/harmony-20/advanced/getting-started/multiplane.html): depth planes and camera view.
+- [OpenToonz Plastic](https://opentoonz.readthedocs.io/en/latest/create_animations_using_plastic_tool.html): mesh, skeleton and intentional mesh editing.

@@ -1,310 +1,240 @@
-# MCP tool catalog and protocol
+# MCP for drawing, animation and filmmaking
 
-Status: proposed design. The tool names and schemas below are a proposed API, not a catalog
-that is currently operational in the source.
+Status: proposed upgrade dated 2026-09-12. Source already contains stdio MCP and
+baseline tools; the expanded catalog below is not implemented. Only verified
+capabilities appear as ready functions in UI and tool discovery.
 
-## 1. General principles
+## 1. Baseline and required changes
 
-- An MCP tool is a thin adapter: it receives a request from an AI agent, converts it into an
-  application command, and returns the result. It contains no separate business logic.
-- Input/output schemas use Zod and generate JSON Schema for the MCP SDK.
-- Write tools (commands) go through the Command Bus, following the same path as the UI.
-- Read tools (resources) query project state and cause no side effects.
-- Idempotency: retrying with the same `requestId` does not create duplicate entities.
-- Errors return readable messages and do not throw uncontrolled exceptions.
+Source inspected: `mcp/server.ts`, `mcp/director-tools.ts`,
+`mcp/character-tools.ts` and `packages/application/src/service/http-server.ts`:
 
-## 2. Naming convention
-
-```text
-<domain>.<action>
-
-Examples: asset.create, rig.add_bone, animation.set_keyframe
-```
-
-Tool names use snake_case for the action, following the MCP SDK convention.
-The domain corresponds to a directory in `apps/mcp/src/tools/`.
-
-## 3. Catalog by domain
-
-### 3.1 Project
-
-| Tool | Type | Description |
-| --- | --- | --- |
-| `project.get_info` | read | Metadata, revision, and asset/scene lists |
-| `project.save` | write | Save the project and return the new revision |
-| `project.get_style_guide` | read | Configured style, palette, and references |
-
-### 3.2 Asset
-
-| Tool | Type | Description |
-| --- | --- | --- |
-| `asset.create` | write | Create a new asset (character/prop/background) |
-| `asset.list` | read | List assets with metadata |
-| `asset.get_info` | read | Details of one asset: views, layers, and rig status |
-| `asset.prepare_image_brief` | read | Brief and references for the agent to generate/edit an image |
-| `asset.import_image` | write | Import a real image into an asset; return asset ID and validation |
-| `asset.attach_view` | write | Attach an image to an asset view |
-| `asset.attach_layer` | write | Attach an image/mask to a body-part layer |
-| `asset.validate_artwork` | read | Check missing layers/views and image problems |
-| `asset.get_preview` | read | Return a thumbnail preview or small render |
-| `asset.delete` | write | Delete an asset and related data |
-
-### 3.3 Mesh
-
-| Tool | Type | Description |
-| --- | --- | --- |
-| `mesh.detect_contour` | read | Automatically detect a contour from a layer's alpha channel |
-| `mesh.generate` | write | Generate a mesh from a contour: triangulation, UVs, vertex placement |
-| `mesh.add_edge_loops` | write | Add vertex loops around joints for smoother deformation |
-| `mesh.set_density` | write | Adjust vertex density in areas that need more movement |
-| `mesh.preview` | read | Return a wireframe mesh image over the texture for agent inspection |
-| `mesh.get_info` | read | Vertex count, triangle count, topology, and edge loops |
-| `mesh.refine` | write | Modify a mesh: add/remove vertices or adjust a local area |
-| `mesh.validate` | read | Check degenerate triangles, UV overlap, and mesh density |
-
-When an AI agent calls `mesh.generate`, the app performs these steps:
-1. Read the alpha channel and extract the contour (silhouette).
-2. Place vertices along the contour and add interior vertices (Earcut + vertex scatter).
-3. Add edge loops around joint regions (shoulders, elbows, hips, knees, and neck).
-4. Triangulate and create UV mapping from texture coordinates.
-5. Return a mesh preview for the agent to inspect before proceeding to rigging.
-
-The agent uses vision to inspect the mesh preview and decide where refinement is needed,
-such as adding vertices around the eyes for expressions or reducing density in low-motion
-regions, then calls `mesh.refine`.
-
-### 3.4 Rig
-
-| Tool | Type | Description |
-| --- | --- | --- |
-| `rig.create_skeleton` | write | Create a bone hierarchy from a template or custom definition |
-| `rig.add_bone` | write | Add a bone to the hierarchy |
-| `rig.remove_bone` | write | Remove a bone and update bindings |
-| `rig.set_weights` | write | Set weights for a bone-layer binding |
-| `rig.get_hierarchy` | read | Current bone tree, pivots, and weights |
-| `rig.test_pose` | write | Apply a temporary pose and return a preview without saving it |
-| `rig.set_rest_pose` | write | Set the rest pose for the current view |
-| `rig.detect_landmarks` | read | Analyze an image and propose landmark positions |
-| `rig.set_landmarks` | write | Set landmarks at coordinates specified by the agent/user |
-| `rig.get_landmarks` | read | Read the current landmarks |
-| `rig.adjust_landmark` | write | Drag/edit one landmark and update the skeleton in real time |
-| `rig.auto_skeleton` | write | Generate a skeleton from landmarks + template type |
-| `rig.auto_weights` | write | Generate weights from bone proximity + layer mask |
-| `rig.preview_skeleton` | read | Return an image of the skeleton overlaid on the character |
-| `rig.list_rig_templates` | read | List available Rig-Ready Image Templates |
-| `rig.get_rig_template` | read | Template details: proportions, landmarks, and prompt |
-| `rig.apply_rig_template` | write | Apply a template to an image: compute landmarks + skeleton + weights |
-
-For Auto-Rig and Rig-Ready Template details, see [AUTO_RIG.md](AUTO_RIG.md).
-
-### 3.5 Animation
-
-| Tool | Type | Description |
-| --- | --- | --- |
-| `animation.create_clip` | write | Create a new clip on a track |
-| `animation.set_keyframe` | write | Add/edit a keyframe at a time |
-| `animation.delete_keyframe` | write | Delete a keyframe |
-| `animation.list_clips` | read | List clips on the timeline |
-| `animation.get_clip_info` | read | Keyframes, duration, and easing for a clip |
-| `animation.preview_frame` | read | Render one frame at a specified time |
-| `animation.list_templates` | read | List available animation templates |
-| `animation.apply_template` | write | Apply a template to the current skeleton |
-| `animation.adjust_template` | write | Edit keyframes from an applied template |
-
-For animation templates and retargeting, see [AUTO_RIG.md](AUTO_RIG.md) section 6.
-
-
-### 3.6 Scene
-
-| Tool | Type | Description |
-| --- | --- | --- |
-| `scene.create` | write | Create a new scene |
-| `scene.add_instance` | write | Place an asset instance in a scene |
-| `scene.remove_instance` | write | Remove an instance |
-| `scene.set_transform` | write | Set position/rotation/scale/depth |
-| `scene.set_camera` | write | Configure the camera (type, position, zoom) |
-| `scene.add_light` | write | Add a light |
-| `scene.set_light` | write | Edit a light (direction, color, intensity, shadows) |
-| `scene.get_info` | read | Current instances, camera, and lights |
-| `scene.create_shot` | write | Create a shot on the timeline |
-| `scene.list_shots` | read | List shots |
-
-### 3.7 Export
-
-| Tool | Type | Description |
-| --- | --- | --- |
-| `export.start_job` | write | Start rendering with a specified profile |
-| `export.get_job_status` | read | Progress, frame count, errors, and remaining time |
-| `export.cancel_job` | write | Cancel a running job |
-| `export.list_profiles` | read | Available presets (2K/4K, 60/120 FPS, codec) |
-| `export.get_result` | read | Result file path after the job completes |
-
-## 4. Example schemas
-
-### `asset.import_image` — Input
-
-```jsonc
-{
-  // Request ID used for idempotent retry
-  "requestId": "req-uuid-v4",
-
-  // Target asset (create a new one if absent)
-  "assetId": "asset-uuid" | null,
-
-  // Path or upload reference
-  "source": {
-    "type": "file_path",            // file_path | upload_chunk
-    "path": "/path/to/image.png"
-  },
-
-  // Metadata
-  "name": "Main character — front view",
-  "viewId": "front",                // null if not yet attached to a view
-  "layerName": "full-body",          // null if layers have not been separated
-
-  // Current revision for conflict checking
-  "baseRevision": 42
-}
-```
-
-### `asset.import_image` — Output
-
-```jsonc
-{
-  "success": true,
-  "assetId": "asset-uuid",
-  "sourceHash": "sha256:abcdef...",
-  "dimensions": { "width": 2048, "height": 2048 },
-  "hasAlpha": true,
-  "alphaValid": true,               // false if a fake checkerboard background is detected
-  "revision": 43,
-  "warnings": [
-    "The 1024×1024 source image is smaller than recommended for 4K output"
-  ]
-}
-```
-
-### `export.start_job` — Input
-
-```jsonc
-{
-  "requestId": "req-uuid-v4",
-  "sceneId": "scene-uuid",
-  "profile": {
-    "resolution": "3840x2160",
-    "fps": 60,
-    "codec": "h264",
-    "quality": "high"
-  },
-  "frameRange": {
-    "start": 0.0,                    // seconds
-    "end": 10.0
-  },
-  "baseRevision": 42
-}
-```
-
-### `export.start_job` — Output
-
-```jsonc
-{
-  "success": true,
-  "jobId": "job-uuid",
-  "snapshotRevision": 42,
-  "status": "rendering",            // rendering | encoding | waiting_renderer
-  "totalFrames": 600,
-  "estimatedDuration": "~5 minutes"
-}
-```
-
-## 5. Special statuses
-
-| Status | Meaning | Returned by tool |
-| --- | --- | --- |
-| `waiting_renderer` | The app is not open / the renderer is not ready | `export.start_job` |
-| `missing_view` | The asset is missing a required view | `asset.validate_artwork` |
-| `topology_mismatch` | A morph uses meshes with incompatible topology | `rig.test_pose` |
-| `encoder_unavailable` | NVENC is unavailable; use software fallback | `export.get_job_status` |
-
-## 6. Idempotency and retry
-
-- Every write tool receives a `requestId`. Dispatching the same `requestId` again returns the
-  stored result and does not create a new entity.
-- A `requestId` is stored in session memory by default, or persisted if necessary.
-- The default TTL for a requestId is one hour.
-- Read tools do not need a `requestId` because they do not change state.
-
-## 7. MCP tool → application command mapping
-
-| MCP tool | Application command |
+| Current source behavior | Gap to target studio |
 | --- | --- |
-| `asset.create` | `asset.create` |
-| `asset.import_image` | `asset.import-image` |
-| `rig.add_bone` | `rig.add-bone` |
-| `animation.set_keyframe` | `animation.set-keyframe` |
-| `export.start_job` | `export.start-job` |
+| Tools such as `project_create`, `asset_import_image`, `animation_set_keyframe` | Catalog exists, but lacks complete Draw/Compose workspaces and typed context |
+| Relay tries ports 5173/3100, then runs local handler after remote success | Can create divergent state/IDs; writes must reach only one authority |
+| Remote failure falls back to local state | AI may edit a different project than UI; report disconnected |
+| HTTP wildcard CORS, unbounded body collection, payload casts | Missing authentication, origin, quota and schema-validation boundaries |
+| Director preview returns metadata with `framing_verified` | Not a verified rendered image; distinguish metadata from images |
+| Director export returns `queued` from metadata | This tool does not enqueue; report queued only after queue acceptance |
+| Character tools use UV crops, sample image paths and face presets | Not general automatic decomposition; never fall back to sample images |
+| Import trusts caller dimensions/alpha; timestamp-based hash | Decode actual bytes and compute a content hash |
 
-An MCP tool handler only:
-1. Parses input with the Zod schema.
-2. Maps it to a command payload.
-3. Dispatches it through the application service.
-4. Maps the command result to an MCP response.
+These are source observations, not full runtime validation. Do not remove old APIs
+during planning; compatibility adapters require semantic verification first.
 
-It contains no rig, animation, validation, or I/O logic.
+## 2. Principles and versions
 
-## 8. Batch operations from MCP
+- MCP is a thin adapter to Application Service; UI and AI share business rules.
+- Snake_case names are a project convention, not an MCP SDK requirement.
+- New names here use proposed `domain_action` form. Keep versioned migration
+  mappings for older APIs rather than silently renaming them.
+- Pin protocol/SDK at build and negotiate during initialization. App API version,
+  project schema version and MCP protocol version are separate values.
+- Generate input/output schemas from shared contracts; return structured content
+  with a text summary. Validate actual requests, not merely tools/list schemas.
+- Tool annotations describe read-only, destructive, idempotent and external I/O
+  behavior; annotations do not replace service authorization.
+- Read-only tools may be queries; large documents/templates/blobs use paginated
+  resources and resource links. Not every read tool is a resource.
 
-An agent can send multiple commands in one call to a special tool:
+## 3. Connection and AI Connection Center
 
-```jsonc
-// Tool: batch.execute
+UI provides a Connection Center shared across workspaces showing client/session,
+project, status, capabilities, recent operations and actionable errors.
+
+Proposed states: `disconnected`, `connecting`, `ready`,
+`degraded`, `incompatible`, `reconnecting`. Renderer/encoder/image capabilities
+have separate status; connected MCP does not imply an image model or NVENC.
+
+The service handshake returns:
+
+```json
 {
-  "requestId": "batch-uuid",
-  "commands": [
-    { "tool": "asset.create", "input": { ... } },
-    { "tool": "asset.import_image", "input": { ... } },
-    { "tool": "rig.create_skeleton", "input": { ... } }
-  ]
+  "serviceInstanceId": "service-uuid",
+  "sessionId": "session-uuid",
+  "projectId": "project-uuid",
+  "revision": 42,
+  "apiVersion": "proposed-v2",
+  "schemaVersion": 2,
+  "capabilities": {
+    "workspaces": ["draw", "rig", "animate", "compose", "edit"],
+    "artifactUpload": true,
+    "previewImage": true,
+    "exportProfiles": ["4k-uhd-60"]
+  },
+  "limits": {
+    "batchOperations": 50,
+    "metadataBytes": 1048576
+  }
 }
 ```
 
-The batch executes atomically through the Command Bus; see
-[COMMAND_BUS.md](COMMAND_BUS.md).
+This illustrates a target response, not current runtime values. Capabilities must
+be probed rather than hardcoded true from configuration or specifications.
 
-## 9. Complete MCP filmmaking workflow
+The service creates a per-user discovery record with endpoint, process instance
+and a token reference protected by file permissions; the bridge verifies the handshake.
+Do not probe ports by sending mutations. Never put tokens in URLs, docs or stdout.
+Stdio emits only MCP frames on stdout; redacted diagnostics go to stderr.
+A bridge may reconnect but must not create a writable fallback project.
+Project switches establish new context; matching IDs/revisions in another project are invalid.
 
-```text
-1. project.get_info               → read the current project
-2. asset.prepare_image_brief      → get a brief for AI image generation
-3. [Agent calls the client's image-generation tool]
-4. asset.import_image             → import the real image
-5. asset.attach_view              → attach a viewing angle
-6. asset.attach_layer             → attach each body-part layer
-7. asset.validate_artwork         → validate layers, alpha, and overlap
-8. mesh.detect_contour            → detect the contour from alpha
-9. mesh.generate                  → automatically generate a mesh
-10. mesh.add_edge_loops           → add edge loops around joints
-11. mesh.preview                  → agent inspects wireframe and decides whether to refine
-12. mesh.refine                   → refine the mesh if needed (repeat 11–12)
-13. mesh.validate                 → validate mesh quality
-14. rig.create_skeleton           → create bones
-15. rig.set_weights               → set weights
-16. rig.test_pose                 → test the pose and inspect the preview
-17. scene.create                  → create a scene
-18. scene.add_instance            → place the character
-19. scene.set_camera              → camera
-20. scene.add_light               → light
-21. animation.create_clip         → clip
-22. animation.set_keyframe        → keyframes
-23. animation.preview_frame       → preview
-24. export.start_job              → export the film
-25. export.get_job_status         → monitor progress
-26. export.get_result             → retrieve the result file
+## 4. Context the AI actually needs
+
+Context queries take explicit scopes and size limits. Responses include:
+
+- Project ID, revision, workspace ID and active document/asset/clip/composition/
+  shot/sequence IDs; selection is a read hint, not an implicit write target.
+- Entity type, stable ID, display name, owner, parent, references and lock state.
+- Units, coordinate space, pivot, canvas bounds, timebase and time range.
+- Layer tree/draw order, source versus instance, missing media and dependencies.
+- Supported operations/capabilities, warnings and available next actions.
+- Preview resources with evaluated revision, time, dimensions and overlays.
+- UI/AI history origin and recent receipts; no complete textures on every query.
+
+Data model: `DrawingDocument`, `DrawingLayer`, `Cel`, `Exposure`,
+`AnimationClip`, `AssetDefinition`, `AssetInstance`, `Composition`,
+`Shot`, `Sequence`. Scope/time follow [PROJECT_FORMAT.md](PROJECT_FORMAT.md).
+AI must not guess layers by name or edit a default scene without a target ID.
+
+## 5. Target capability catalog
+
+These names do not claim implementation. Discovery exposes only tools with
+handlers, schemas, capabilities and integration checks. Tool families may accept
+finite operation unions, never generic execute-code or arbitrary patches.
+
+| Group | Proposed tools | Lane and result |
+| --- | --- | --- |
+| Connection/context | `session_get_info`, `project_get_context` | Context, version, capability and revision queries |
+| Entity lookup | `project_find_entities` | Typed/filterable/paginated query with stable IDs |
+| History | `project_get_receipt`, `project_apply_batch` | Receipt query or durable transaction per [COMMAND_BUS.md](COMMAND_BUS.md) |
+| Save | `project_save` | Persistence operation returning an actual persisted revision |
+| Brief | `asset_prepare_image_brief` | Brief, source references and layer requirements query |
+| Artifact | `artifact_begin_upload`, `artifact_upload_chunk`, `artifact_finalize` | Staging I/O; no project mutation yet |
+| Import | `asset_import_image` | Commit a validated artifact into the target asset/view/layer |
+| Draw | `drawing_apply_edit` | Durable typed stroke/fill/mask/layer/cel/exposure operations |
+| Rig candidate | `mesh_build_candidate`, `rig_build_candidate` | Candidate-generation job and validation report |
+| Rig apply | `rig_apply_candidate` | Durable binding/mesh/rest pose after revision checks |
+| Animate | `animation_edit_clip` | Durable typed keys, curves, exposure and clip publishing |
+| Compose | `composition_edit` | Durable instance/layer/depth/parent/camera/light/clip placement |
+| Edit | `sequence_edit` | Durable shot ordering, trim, transition, audio/subtitle timing |
+| Preview | `preview_render` | Query/job returning an actual image resource and evaluated revision |
+| Director plan | `director_validate_plan` | Structured-plan validation query, missing assets and operation diff |
+| Director apply | `director_apply_plan` | Checkpointed transaction-orchestration job, not film-wide all-or-nothing |
+| Export | `export_start_job`, `job_get_status`, `job_cancel` | Snapshot job, progress, cancellation and result artifact |
+
+V1 first completes connection/context, receipts/batches, artifacts, previews and
+job lifecycle; workspace tools unlock with completed milestones. Draw schemas
+advertise only supported brushes/fills; without a brush engine, never return
+success with an empty layer instead of a stroke.
+
+## 6. Mutation envelopes and structured errors
+
+Writes take `requestId`, `projectId`, `baseRevision`, target IDs and typed payloads.
+UI gestures commit one transaction; AI sends operation-level intent rather than
+streaming thousands of mouse events. Batch/retry/undo follow [COMMAND_BUS.md](COMMAND_BUS.md).
+
+```json
+{
+  "ok": false,
+  "requestId": "req-uuid",
+  "projectId": "project-uuid",
+  "error": {
+    "code": "revision_conflict",
+    "message": "The composition changed after the snapshot.",
+    "retryable": false,
+    "currentRevision": 43,
+    "fieldPath": "baseRevision",
+    "entityIds": ["composition-uuid"],
+    "recoveryAction": "reload_context"
+  }
+}
 ```
 
-## 10. References
+Tool failures use the appropriate MCP error indicator and structured errors,
+rather than embedding an error string inside success JSON. Success returns
+receipt, changed IDs, revision, warnings and resource refs. Never report whole-batch
+success after a child operation fails. Transport timeouts have unknown outcome;
+callers query receipts before immediately generating new request IDs.
 
-- [PLAN.md](PLAN.md) section 5 — AI/MCP and shared data
-- [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) — detailed image-generation workflow
-- [COMMAND_BUS.md](COMMAND_BUS.md) — the Command Bus called by MCP tools
-- [MODULE_MAP.md](MODULE_MAP.md) — `apps/mcp/src/tools/`
+## 7. Real artifact handoff
+
+1. The agent obtains a brief, then calls the client's image tool if available.
+2. The agent inspects the source; on the same machine use an allowlisted path,
+   otherwise upload chunks with sequence, length, total size and content hash.
+3. The service decodes actual MIME, dimensions, alpha, color metadata and checksum.
+   Caller dimensions/alpha are hints rather than trusted data.
+4. Finalize returns an immutable artifact ID; import attaches it with revision checks.
+5. Post-import preview shows actual layers. Flat images do not automatically become
+   parts; UV crops do not establish that occluded regions were reconstructed.
+
+Never fall back to a default image on path errors. Chat thumbnails are not sources.
+Uploads have expiry, quota, cleanup and duplicate-safe chunk retries; staging does
+not dirty projects. UI prepares briefs and shows waiting-for-agent without client
+launch support; the MCP server does not reverse-call image tools.
+Artwork and decomposition details follow [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md).
+
+## 8. AI director from script to Sequence
+
+1. Read library/context, timebase and output profile; prepare a plan with stable
+   plan ID, source script hash, base revision, scenes, shots and asset/clip references.
+2. Map every shot to Composition, camera, duration, staging, action clips and
+   dialogue/audio/subtitle cues. Never overwrite one shared shot camera in a loop.
+3. Validate missing assets/clips, unsupported effects, overlaps, camera overscan,
+   dependencies and total duration. Return diff and cost before applying.
+4. Within user-authorized scope, apply per shot or bounded transaction group.
+   Store checkpoints/receipts; failures identify committed and unexecuted work.
+5. Render contact sheets and representative start/middle/end frames with the real
+   renderer. Mark visual review pending without images; metadata does not verify framing.
+6. Revise plans/shots from results, enqueue snapshot export, poll or subscribe to
+   jobs, then return an actual completed video and measured output properties.
+
+Retry/resume use plan ID and checkpoints without duplicating shots/assets/clips.
+Do not repeatedly request confirmation within assigned scope; destructive changes
+outside scope require a separate explicit choice. Preserve plan source and execution
+reports for audit. The current rule-based parser is only a baseline, not a complete AI director.
+
+## 9. Security boundaries and limits
+
+- Loopback HTTP requires authenticated sessions, origin/host allowlists and DNS
+  rebinding protection; no wildcard CORS for mutations.
+- Validate schemas at MCP and service boundaries: finite numbers, enums, lengths,
+  bounds and graph references. TypeScript casts are not validation.
+- Resolve canonical paths and block traversal/symlink escape; allow read/write
+  roots explicitly. MCP roots provide context, not automatic filesystem permission.
+- Cap request/upload bytes, decoded pixels, stroke points, mesh vertices and job
+  concurrency. Advertise limits through capabilities and test before allocation.
+- Disable active content/external fetch in SVG/PSD/importers; artifact URLs cannot
+  enable SSRF or arbitrary network access.
+- Spawn FFmpeg with argument arrays rather than filename-derived shell strings.
+- Delete/replace reports reference impact and supports undo/trash where possible;
+  destructive annotations still require permission and scope checks.
+- Logs/resource URIs must not expose tokens, credentials or out-of-project paths.
+- Verify session authority; occupied ports must not be ignored as success.
+
+## 10. Connection and workflow acceptance
+
+1. Two MCP clients and UI on one project see one mutation/revision; reconnect
+   creates no separate state or duplicate entity.
+2. Service restart or project switch rejects stale tokens/context without wrong-target writes.
+3. Unsupported API/schema/capability shows incompatible/degraded with appropriate tools.
+4. Invalid import paths, fake alpha, bad hashes and oversized chunks fail before commit.
+5. Create a 3-cel drawing with hold exposures, publish a clip, place 2 instances in
+   a Composition, and create 2 Shots and a Sequence; preview/export use correct source/time mapping.
+6. Invalid mesh candidates preserve existing meshes; AI gets overlays and specific errors.
+7. Director retry after network loss retains created shots without checkpoint duplication.
+8. Preview returns a decodable image at the correct revision/time, not metadata in its place.
+9. Export tools return real jobs; cancellation works; completed results contain verifiable videos.
+10. Test JSON-RPC over stdio and a real HTTP service, not only private SDK handlers;
+    verify clean stdout, timeouts, malformed payloads, file permissions and UI synchronization.
+
+## 11. References
+
+- [COMMAND_BUS.md](COMMAND_BUS.md) — transactions, gestures and revisions.
+- [PROJECT_FORMAT.md](PROJECT_FORMAT.md) — entities and time.
+- [UI_SPECIFICATION.md](UI_SPECIFICATION.md) — workspaces and Connection Center.
+- [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) — actual images and layers.
+- [AUTO_RIG.md](AUTO_RIG.md) — rig candidates and validation.
+- [RENDER_PROFILES.md](RENDER_PROFILES.md) — snapshot/export capabilities.
+- [TESTING_STRATEGY.md](TESTING_STRATEGY.md) — integration checks.

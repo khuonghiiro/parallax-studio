@@ -1,0 +1,87 @@
+.compose-bar {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  background: rgba(14, 16, 26, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-subtle, #272a3a);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  z-index: 10;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.compose-bar__section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compose-bar__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted, #717790);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.compose-bar__instances {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  max-width: 420px;
+}
+
+.compose-bar__instance-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle, #272a3a);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--text-secondary, #b4b9d0);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.compose-bar__instance-chip:hover {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: var(--accent, #6366f1);
+  color: #fff;
+}
+
+.compose-bar__instance-chip--active {
+  background: var(--accent, #6366f1);
+  border-color: var(--accent, #6366f1);
+  color: #fff;
+  font-weight: 500;
+}
+
+.compose-bar__depth-badge {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.compose-bar__depth-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.compose-bar__camera-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

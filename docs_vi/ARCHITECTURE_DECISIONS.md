@@ -227,7 +227,7 @@ phải có topology chuẩn tương tự edge loops trong 3D.
 
 ## ADR-009: Kiến trúc UI 2 chế độ (Setup / Animate), Command Bus và Hệ thống Icon chuẩn
 
-**Trạng thái:** accepted
+**Trạng thái:** partially superseded by ADR-010 (phần 2 chế độ Setup/Animate bị thay thế bởi ADR-010; Command Bus và hệ thống Icon tiếp tục accepted)
 
 **Bối cảnh:**
 Phần mềm làm phim hoạt hình 2D/2.5D có khối lượng công cụ rất lớn (vẽ mesh, tạo xương,
@@ -257,6 +257,42 @@ gây phân mảnh giao diện và không đồng bộ cross-platform.
 - Bộ icon được quản lý tập trung trong `apps/editor/src/ui/icons/`.
 
 **Tham chiếu:** [UI_SPECIFICATION.md](UI_SPECIFICATION.md), [COMMAND_BUS.md](COMMAND_BUS.md), [MCP_TOOLS.md](MCP_TOOLS.md).
+
+---
+
+## ADR-010: Năm workspace chuyên biệt (Draw, Rig, Animate, Compose, Edit) thay thế kiến trúc hai chế độ Setup / Animate
+
+**Trạng thái:** proposed
+
+**Bối cảnh:**
+Mô hình 2 chế độ Setup / Animate trong ADR-009 gom quá nhiều trách nhiệm vào mỗi chế độ:
+Setup vừa vẽ layer, vừa nắn mesh, vừa gắn xương; Animate vừa diễn hoạt asset, vừa dàn cảnh
+đa mặt phẳng, vừa lia camera và cắt dựng phim. Điều này khiến timeline bị trộn lẫn giữa key của
+asset và shot, không hỗ trợ tốt luồng vẽ cel frame-by-frame, và làm lẫn lộn giữa bản gốc
+(AssetDefinition) với bản thể hiện trong cảnh (AssetInstance).
+
+**Quyết định:**
+1. Thay thế mô hình 2 chế độ bằng 5 workspace chuyên biệt trong cùng một project:
+   - `draw`: Vẽ raster, quản lý layer, cels, exposure sheet và onion skin.
+   - `rig`: Biên tập mesh (thủ công/tự động giữ holes), khung xương, weights và test pose.
+   - `animate`: Tạo và tinh chỉnh các AnimationClip tái sử dụng của asset (dope sheet, curves, cels).
+   - `compose`: Dàn cảnh 2.5D đa mặt phẳng (multiplane), đặt AssetInstance, chỉnh đường đi camera và ánh sáng/bóng đổ với hai khung nhìn đồng thời (Stage Perspective/Top/Side và Final Camera View).
+   - `edit`: Dựng phim hoàn chỉnh (Sequence, cắt ghép Shot, track audio, subtitle, và hàng đợi render/xuất video).
+2. Giữ nguyên tính hợp lệ của Command Bus thống nhất và hệ thống Icon chuẩn (Lucide + custom SVG inline) từ ADR-009.
+
+**Lý do:**
+- Phân định rõ quyền sở hữu dữ liệu và ranh giới tác vụ giữa vẽ, tạo rig, diễn hoạt asset, dàn cảnh và dựng phim.
+- Khắc phục triệt để việc trộn lẫn keyframe của nhân vật và keyframe camera/shot.
+- Cho phép tái sử dụng clip trên nhiều instance với time offset khác nhau mà không sửa asset gốc.
+- Phù hợp với toàn bộ quy trình làm phim 2.5D hoàn chỉnh từ asset đến video xuất bản.
+
+**Hệ quả:**
+- Bố cục UI, shell navigation và command routing được tổ chức lại quanh 5 workspace ID ổn định: `draw`, `rig`, `animate`, `compose`, `edit`.
+- Timeline được module hóa thành 3 adapter chuyên biệt: Exposure sheet (`draw`), Clip dope sheet/curves (`animate`), và Sequence timeline (`edit`).
+- Viewport hỗ trợ chế độ xem kép trong Compose (Stage 3D view và Camera framing view).
+- ADR-009 được chuyển thành partially superseded (phần kiến trúc 2 chế độ bị thay thế, phần Command Bus và Icon được giữ nguyên).
+
+**Tham chiếu:** [UI_SPECIFICATION.md](UI_SPECIFICATION.md), [PLAN.md](PLAN.md) mục 2 và 4, [PROJECT_FORMAT.md](PROJECT_FORMAT.md), [MODULE_MAP.md](MODULE_MAP.md).
 
 ---
 

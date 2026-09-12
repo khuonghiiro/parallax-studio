@@ -182,3 +182,17 @@ export type {
   StateSyncEvent,
 } from './session/session-info.js';
 
+// Drawing domain
+export {
+  CelSchema,
+  DrawingLayerSchema,
+  ExposureSchema,
+  DrawingDocumentSchema,
+} from './drawing/drawing.js';
+export type {
+  Cel,
+  DrawingLayer,
+  Exposure,
+  DrawingDocument,
+} from './drawing/drawing.js';
+

@@ -20,7 +20,10 @@ export class ViewportController {
   private readonly container: HTMLElement;
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene: THREE.Scene;
-  private readonly camera: THREE.OrthographicCamera;
+  private readonly orthoCamera: THREE.OrthographicCamera;
+  private readonly perspectiveCamera: THREE.PerspectiveCamera;
+  private activeCamera: THREE.Camera;
+  private cameraMode: 'orthographic' | 'perspective' = 'orthographic';
   private gridHelper: THREE.GridHelper | null = null;
   private axesHelper: THREE.AxesHelper | null = null;
 
@@ -31,10 +34,12 @@ export class ViewportController {
     showHeatmap: false,
   };
 
-  // Camera state
+  // Camera navigation & 2.5D orbit state
   private zoom: number = 1.0;
   private panOffset: THREE.Vector2 = new THREE.Vector2(0, 0);
+  private orbitAngle: THREE.Vector2 = new THREE.Vector2(0, 0);
   private isPanning: boolean = false;
+  private isOrbiting: boolean = false;
   private lastMousePos: THREE.Vector2 = new THREE.Vector2(0, 0);
 
   // Performance tracking
@@ -44,10 +49,11 @@ export class ViewportController {
   private animFrameId: number | null = null;
   private isDisposed: boolean = false;
 
-  // Scene content group
+  // Scene content groups
   private groundGroup: THREE.Group = new THREE.Group();
   private contentGroup: THREE.Group = new THREE.Group();
   private overlayGroup: THREE.Group = new THREE.Group();
+  private stagePlanesGroup: THREE.Group = new THREE.Group();
 
   constructor(options: ViewportOptions) {
     this.container = options.container;
@@ -70,6 +76,7 @@ export class ViewportController {
     // Create scene with dedicated layers
     this.scene = new THREE.Scene();
     this.scene.add(this.groundGroup);
+    this.scene.add(this.stagePlanesGroup);
     this.scene.add(this.contentGroup);
     this.scene.add(this.overlayGroup);
 
@@ -88,18 +95,28 @@ export class ViewportController {
     // Create orthographic camera centered at origin
     const aspect = width / height;
     const viewSize = 1400;
-    this.camera = new THREE.OrthographicCamera(
+    this.orthoCamera = new THREE.OrthographicCamera(
       (-viewSize * aspect) / 2,
       (viewSize * aspect) / 2,
       viewSize / 2,
       -viewSize / 2,
       0.1,
-      2000,
+      5000,
     );
-    this.camera.position.set(0, 0, 1000);
-    this.camera.lookAt(0, 0, 0);
+    this.orthoCamera.position.set(0, 0, 1000);
+    this.orthoCamera.lookAt(0, 0, 0);
+
+    // Create perspective camera for 2.5D multiplane parallax
+    this.perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, 1, 10000);
+    const fovRad = (45 * Math.PI) / 180;
+    const defaultDist = (1400 / 2) / Math.tan(fovRad / 2);
+    this.perspectiveCamera.position.set(0, 0, defaultDist);
+    this.perspectiveCamera.lookAt(0, 0, 0);
+
+    this.activeCamera = this.orthoCamera;
 
     this.setupGroundShadow();
+    this.setupStagePlanes();
     this.setupGrid();
     this.bindEvents();
     this.startRenderLoop();
@@ -136,11 +153,37 @@ export class ViewportController {
     } catch {}
   }
 
+  private setupStagePlanes(): void {
+    // 2.5D Reference Stage Planes: Foreground (+150), Midground (0), Background (-250)
+    const planes = [
+      { depth: 150, color: 0x38bdf8, opacity: 0.35, name: 'Foreground Plane' },
+      { depth: 0, color: 0x818cf8, opacity: 0.45, name: 'Midground Plane' },
+      { depth: -250, color: 0x64748b, opacity: 0.30, name: 'Background Plane' },
+    ];
+
+    const planeGeo = new THREE.PlaneGeometry(1800, 1100);
+    const edges = new THREE.EdgesGeometry(planeGeo);
+
+    planes.forEach(({ depth, color, opacity, name }) => {
+      const lineMat = new THREE.LineBasicMaterial({
+        color,
+        transparent: true,
+        opacity,
+      });
+      const frame = new THREE.LineSegments(edges, lineMat);
+      frame.position.set(0, 0, depth);
+      frame.name = name;
+      this.stagePlanesGroup.add(frame);
+    });
+
+    // Hidden by default in 2D, enabled in 2.5D compose staging
+    this.stagePlanesGroup.visible = false;
+  }
+
   private setupGrid(): void {
     if (this.gridHelper) {
       this.scene.remove(this.gridHelper);
     }
-    // High-end subtle studio grid (softened to prevent birdcage visual distraction)
     const size = 2400;
     const divisions = 24;
     this.gridHelper = new THREE.GridHelper(size, divisions, 0x303650, 0x181c2c);
@@ -164,6 +207,7 @@ export class ViewportController {
     window.addEventListener('mousemove', this.handleMouseMove);
     window.addEventListener('mouseup', this.handleMouseUp);
     el.addEventListener('wheel', this.handleWheel, { passive: false });
+    el.addEventListener('contextmenu', this.handleContextMenu);
     window.addEventListener('resize', this.handleResize);
   }
 
@@ -173,12 +217,21 @@ export class ViewportController {
     window.removeEventListener('mousemove', this.handleMouseMove);
     window.removeEventListener('mouseup', this.handleMouseUp);
     el.removeEventListener('wheel', this.handleWheel);
+    el.removeEventListener('contextmenu', this.handleContextMenu);
     window.removeEventListener('resize', this.handleResize);
   }
 
+  private handleContextMenu = (e: MouseEvent): void => {
+    e.preventDefault();
+  };
+
   private handleMouseDown = (e: MouseEvent): void => {
-    // Middle click or Alt+Left click triggers pan
-    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+    // Right click or Shift + Left click triggers 3D orbit tilt
+    if (e.button === 2 || (e.button === 0 && e.shiftKey)) {
+      this.isOrbiting = true;
+      this.lastMousePos.set(e.clientX, e.clientY);
+      e.preventDefault();
+    } else if (e.button === 1 || (e.button === 0 && e.altKey)) {
       this.isPanning = true;
       this.lastMousePos.set(e.clientX, e.clientY);
       e.preventDefault();
@@ -186,21 +239,33 @@ export class ViewportController {
   };
 
   private handleMouseMove = (e: MouseEvent): void => {
-    if (!this.isPanning) return;
+    if (this.isOrbiting) {
+      const dx = e.clientX - this.lastMousePos.x;
+      const dy = e.clientY - this.lastMousePos.y;
+      this.lastMousePos.set(e.clientX, e.clientY);
 
-    const dx = e.clientX - this.lastMousePos.x;
-    const dy = e.clientY - this.lastMousePos.y;
-    this.lastMousePos.set(e.clientX, e.clientY);
+      this.orbitAngle.x += dx * 0.005;
+      this.orbitAngle.y = Math.max(-0.65, Math.min(0.65, this.orbitAngle.y + dy * 0.005));
+      this.updateCameraBounds();
+      return;
+    }
 
-    // Pan camera in world coordinates
-    const scale = 1 / this.zoom;
-    this.panOffset.x -= dx * scale;
-    this.panOffset.y += dy * scale;
+    if (this.isPanning) {
+      const dx = e.clientX - this.lastMousePos.x;
+      const dy = e.clientY - this.lastMousePos.y;
+      this.lastMousePos.set(e.clientX, e.clientY);
 
-    this.updateCameraBounds();
+      const scale = 1 / this.zoom;
+      this.panOffset.x -= dx * scale;
+      this.panOffset.y += dy * scale;
+      this.updateCameraBounds();
+    }
   };
 
   private handleMouseUp = (e: MouseEvent): void => {
+    if (e.button === 2 || (e.button === 0 && !e.altKey)) {
+      this.isOrbiting = false;
+    }
     if (e.button === 1 || e.button === 0) {
       this.isPanning = false;
     }
@@ -220,20 +285,60 @@ export class ViewportController {
   public resetView(): void {
     this.zoom = 1.0;
     this.panOffset.set(0, 0);
+    this.orbitAngle.set(0, 0);
     this.updateCameraBounds();
+  }
+
+  public setCameraMode(mode: 'orthographic' | 'perspective'): void {
+    this.cameraMode = mode;
+    this.activeCamera = mode === 'perspective' ? this.perspectiveCamera : this.orthoCamera;
+    this.updateCameraBounds();
+  }
+
+  public getCameraMode(): 'orthographic' | 'perspective' {
+    return this.cameraMode;
+  }
+
+  public setOrbitAngle(yawDeg: number, pitchDeg: number): void {
+    this.orbitAngle.set((yawDeg * Math.PI) / 180, (pitchDeg * Math.PI) / 180);
+    this.updateCameraBounds();
+  }
+
+  public setShowShadows(show: boolean): void {
+    this.groundGroup.visible = show;
+  }
+
+  public setStagePlanesVisible(show: boolean): void {
+    this.stagePlanesGroup.visible = show;
   }
 
   private updateCameraBounds(): void {
     const width = this.container.clientWidth || 800;
     const height = this.container.clientHeight || 600;
     const aspect = width / height;
-    const viewSize = 1400 / this.zoom;
 
-    this.camera.left = (-viewSize * aspect) / 2 + this.panOffset.x;
-    this.camera.right = (viewSize * aspect) / 2 + this.panOffset.x;
-    this.camera.top = viewSize / 2 + this.panOffset.y;
-    this.camera.bottom = -viewSize / 2 + this.panOffset.y;
-    this.camera.updateProjectionMatrix();
+    if (this.cameraMode === 'orthographic') {
+      const viewSize = 1400 / this.zoom;
+      this.orthoCamera.left = (-viewSize * aspect) / 2 + this.panOffset.x;
+      this.orthoCamera.right = (viewSize * aspect) / 2 + this.panOffset.x;
+      this.orthoCamera.top = viewSize / 2 + this.panOffset.y;
+      this.orthoCamera.bottom = -viewSize / 2 + this.panOffset.y;
+      this.orthoCamera.position.set(this.panOffset.x, this.panOffset.y, 1000);
+      this.orthoCamera.lookAt(this.panOffset.x, this.panOffset.y, 0);
+      this.orthoCamera.updateProjectionMatrix();
+    } else {
+      this.perspectiveCamera.aspect = aspect;
+      const fovRad = (45 * Math.PI) / 180;
+      const dist = (1400 / 2) / Math.tan(fovRad / 2) / this.zoom;
+      const yaw = this.orbitAngle.x;
+      const pitch = this.orbitAngle.y;
+      const camX = this.panOffset.x + dist * Math.sin(yaw) * Math.cos(pitch);
+      const camY = this.panOffset.y + dist * Math.sin(pitch);
+      const camZ = dist * Math.cos(yaw) * Math.cos(pitch);
+      this.perspectiveCamera.position.set(camX, camY, camZ);
+      this.perspectiveCamera.lookAt(this.panOffset.x, this.panOffset.y, 0);
+      this.perspectiveCamera.updateProjectionMatrix();
+    }
   }
 
   public handleResize = (): void => {
@@ -299,16 +404,13 @@ export class ViewportController {
   }
 
   public getCamera(): THREE.Camera {
-    return this.camera;
+    return this.activeCamera;
   }
 
   public getRenderer(): THREE.WebGLRenderer {
     return this.renderer;
   }
 
-  /**
-   * Update or remove heatmap vertex colors on the active mesh.
-   */
   public updateMeshHeatmap(colors: Float32Array | null): void {
     this.contentGroup.traverse((child) => {
       if (child instanceof THREE.Mesh && child.geometry) {
@@ -343,30 +445,34 @@ export class ViewportController {
     });
   }
 
-  /**
-   * Convert client window coordinates (e.g. from mouse event) to world 2D coordinates.
-   */
   public clientToWorld(clientX: number, clientY: number): THREE.Vector2 {
     const rect = this.container.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+    const ndcX = ((clientX - rect.left) / (rect.width || 800)) * 2 - 1;
+    const ndcY = -((clientY - rect.top) / (rect.height || 600)) * 2 + 1;
 
-    const width = rect.width || 800;
-    const height = rect.height || 600;
-    const aspect = width / height;
-    const viewSize = 800 / this.zoom;
+    if (this.cameraMode === 'orthographic') {
+      const width = rect.width || 800;
+      const height = rect.height || 600;
+      const aspect = width / height;
+      const viewSize = 1400 / this.zoom;
+      const worldX = (ndcX * (viewSize * aspect)) / 2 + this.panOffset.x;
+      const worldY = (ndcY * viewSize) / 2 + this.panOffset.y;
+      return new THREE.Vector2(worldX, worldY);
+    }
 
-    const worldX = (x / width - 0.5) * (viewSize * aspect) + this.panOffset.x;
-    const worldY = -(y / height - 0.5) * viewSize + this.panOffset.y;
-
-    return new THREE.Vector2(worldX, worldY);
+    const vec = new THREE.Vector3(ndcX, ndcY, 0.5);
+    vec.unproject(this.perspectiveCamera);
+    const dir = vec.sub(this.perspectiveCamera.position).normalize();
+    const dist = -this.perspectiveCamera.position.z / (dir.z || 0.0001);
+    const hit = this.perspectiveCamera.position.clone().add(dir.multiplyScalar(dist));
+    return new THREE.Vector2(hit.x, hit.y);
   }
 
   private startRenderLoop(): void {
     const loop = (timestamp: number): void => {
       if (this.isDisposed) return;
 
-      this.renderer.render(this.scene, this.camera);
+      this.renderer.render(this.scene, this.activeCamera);
       this.frameCount++;
 
       if (timestamp - this.lastFpsTime >= 1000) {

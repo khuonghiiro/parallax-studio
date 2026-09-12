@@ -12,6 +12,7 @@ export const CommandDomainSchema = z.enum([
   'scene',
   'export',
   'project',
+  'drawing',
 ]);
 export type CommandDomain = z.infer<typeof CommandDomainSchema>;
 
@@ -68,6 +69,11 @@ export const CommandTypeSchema = z.enum([
   // Project commands
   'create_project',
   'save_project',
+
+  // Drawing commands
+  'create_drawing_doc',
+  'add_drawing_layer',
+  'commit_drawing_cel',
 ]);
 export type CommandType = z.infer<typeof CommandTypeSchema>;
 

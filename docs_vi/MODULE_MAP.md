@@ -1,198 +1,129 @@
-# Bản đồ module — kiến trúc đề xuất
+# Bản đồ module cho studio vẽ và dựng phim
 
-Đây là đích của mốc chuẩn hóa, chưa phải toàn bộ cấu trúc hiện có. Chỉ tạo module
-khi triển khai trách nhiệm có thật; không scaffold hàng loạt file rỗng.
+Trạng thái: đề xuất nâng cấp 12/09/2026. Đã có `packages/contracts/`,
+`packages/core/`, `packages/application/`, `packages/runtime/`, UI ở `src/`,
+service ở `service/`, MCP ở `mcp/`. `apps/` chưa tồn tại. Bản đồ dưới đây
+phân trách nhiệm, không bắt buộc di chuyển toàn bộ thư mục trước khi cải tiến.
+Chỉ tạo module khi có trách nhiệm thật; không tạo scaffold rỗng.
 
-## Sơ đồ thư mục
+## 1. Owner theo workflow
 
-```text
-apps/
-  editor/src/
-    app/                    Khởi động, layout, kết nối feature
-    features/
-      assets/               Library, import, layer editor
-      rig/                  Bone tree, pivot, weight brush, test pose
-      views/                Bộ góc nhìn và biểu cảm
-      stage/                Viewport và tương tác
-      timeline/             Track, clip, playhead UI
-      director/             Kịch bản, shot, tiến độ AI
-      export/               Cài đặt và tiến độ render
-    services/
-      transport/            HTTP, parse lỗi, timeout
-      session/              Session client có ownership rõ
-      project/              Adapter gọi application service
-    ui/                     Button, dialog, field, icon catalog (Lucide + custom SVG)
-  service/src/
-    http/                   Route mỏng
-    adapters/
-      persistence/          Atomic write, project repository, media store
-      encoding/             FFmpeg process và progress
-      renderer/             Renderer registration và job transport
-    bootstrap.ts            Lắp dependencies và khởi động
-  mcp/src/
-    tools/                  Adapter theo asset, rig, animation, scene, export
-    resources/              Summary, preview và job status
-    server.ts               Lắp SDK và transport
-  desktop/src-tauri/src/    Tauri shell và lifecycle sidecar
-packages/
-  contracts/src/
-    asset/                  Layer, material, view schema
-    rig/                    Bone, binding, pose, landmark, rig template schema
-    animation/              Track, clip, keyframe schema
-    scene/                  Instance, camera, light, shot schema
-    commands/               Command payload và result
-    jobs/                   Render job state
-    images/                 ImageGenerationBrief và artifact handoff
-    export/                 ExportProfile: resolution, FPS, codec, quality
-    session/                SessionInfo và transport DTO
-  core/src/
-    geometry/               Contour extraction, triangulation (Earcut), UV,
-                            vertex density, edge loops, mesh preview, topology
-    rig/                    Hierarchy, bind pose, weights, IK, landmarks, auto-skeleton
-    deformation/            Warp grid, morph, pose composition
-    views/                  View selection và chuyển góc
-    animation/              Easing, keyframes, clips, sampling
-    scene/                  Transform, layer/depth, camera sampling
-    validation/             Invariant nghiệp vụ liên miền
-  application/src/
-    commands/               Handler theo miền, command registry
-    history/                Undo/redo và transaction
-    projects/               Revision, snapshot, orchestration
-    jobs/                   Queue, lease, cancellation, retry
-    images/                 Brief, source ingestion, view/layer orchestration
-    ports/                  Interface storage, renderer, encoder, provider
-  runtime/src/
-    meshes/                 Render mesh và skeleton adapter
-    materials/              Image, alpha, normal map
-    shadows/                Shadow pass và receiver
-    cameras/                Camera adapter
-    resources/              Texture/geometry cache và dispose
-    playback/               Frame loop dùng core sampling
-    export/                 Frame rendering dùng cùng runtime
-  image-handoff/src/        Reference, file/upload và kiểm tra artifact AI đã tạo
-scripts/quality/            Gate nhỏ, độc lập và đọc được
-docs_vi/                    Đặc tả tiếng Việt gốc do người dùng review
-docs/                       Bản dịch tiếng Anh từ docs_vi để AI đọc
-```
-
-## Quyền sở hữu và phụ thuộc
-
-| Module | Được phụ thuộc | Không được phụ thuộc |
+| Workspace | UI owner trong cấu trúc hiện tại | Domain owner và contract |
 | --- | --- | --- |
-| contracts | Schema library | Core, runtime, UI, service |
-| core | contracts, thuật toán thuần | React, Three.js, DOM, Node I/O, MCP, Tauri |
-| application | core, contracts, ports | UI, Three.js, storage cụ thể |
-| runtime | core, contracts, Three.js | UI, MCP, ghi project trực tiếp |
-| editor feature | services, core thuần cho preview, contracts, ui | HTTP trong component, MCP, Node fs |
-| service adapter | application ports, thư viện I/O | Nghiệp vụ được viết lại |
-| MCP tool | contracts, application client | Tự sửa project hoặc thuật toán rig riêng |
-| desktop shell | Lifecycle và native adapter | Bản sao rig/timeline/scene reducer |
+| `draw` | `src/features/drawing/` | DrawingDocument, DrawingLayer, Cel, Exposure tại contracts/drawing; core/drawing |
+| `rig` | `src/features/rig/`, asset assembly dùng assets | AssetDefinition tại contracts/asset; geometry và rig tại core |
+| `animate` | `src/features/animation/` | AnimationClip, ClipPlacement tại contracts/animation; core/animation |
+| `compose` | `src/features/composition/` | Composition, AssetInstance tại contracts/composition; core/scene |
+| `edit` | `src/features/sequence/` | Shot, Sequence, AudioClip, SubtitleCue tại contracts/sequence; core/sequence |
 
-Local application service xử lý command có thẩm quyền. UI dùng cùng core để preview
-khi kéo nhưng commit qua service. MCP cũng gọi service, không tạo project state riêng.
+Các path mới là owner đề xuất, không phải tuyên bố đã triển khai. Feature assets
+sở hữu library/import/parts/views dùng chung; feature stage sở hữu viewport host,
+picking và điều phối overlay; không sở hữu quy tắc mesh, transform hay sampling.
+Timeline shell có chung ruler, zoom, selection và accessibility; exposure sheet,
+clip dope sheet/curves và sequence edit có adapter riêng theo domain.
 
-### Sơ đồ phụ thuộc
+## 2. Ranh giới module dùng chung
 
-```mermaid
-graph TD
-  contracts["contracts"]
-  core["core"]
-  application["application"]
-  runtime["runtime"]
-  editor["editor"]
-  service["service"]
-  mcp["mcp"]
-  desktop["desktop"]
-  imagehandoff["image-handoff"]
+| Owner | Trách nhiệm duy nhất | Không được làm |
+| --- | --- | --- |
+| `packages/contracts/src/drawing/` | Drawing/layer/cel/exposure schemas, stroke command DTO | Brush rasterization, UI state |
+| `packages/contracts/src/asset/` | Definition, part, view, media reference schemas | Mutable instance pose |
+| `packages/contracts/src/animation/` | Typed tracks, clips, placements, channel masks | React timeline state |
+| `packages/contracts/src/composition/` | Composition node, depth plane, camera route schemas | Duplicate scene transforms |
+| `packages/contracts/src/sequence/` | Shot, sequence, audio/subtitle, transition schemas | Encoder logic |
+| `packages/core/src/drawing/` | Exposure evaluation, tile edit semantics, masks, brush sampling rules | Device event listeners, storage |
+| `packages/core/src/geometry/` | Contours/holes, topology edits, triangulation validation, UV | Assume Earcut repairs invalid input |
+| `packages/core/src/rig/` | Hierarchy, rest/bind, influence normalize, weights, IK | UI-specific weight algorithm |
+| `packages/core/src/animation/` | Time mapping, keys/easing, clip blending, exposure scheduling | Another exporter sampler |
+| `packages/core/src/scene/` | Parenting/world transforms, depth, camera route sampling | GPU resources |
+| `packages/core/src/sequence/` | Shot mapping, transitions, audio/subtitle timing | FFmpeg process |
+| `packages/core/src/dependencies/` | Typed-ref graph, invalidation, compatibility/rebind plan | File I/O |
+| `packages/application/src/` | Authoritative commands, transactions, gestures commit, jobs, history | Reimplement core algorithms |
+| `packages/runtime/src/` | Raster/tile texture upload, deformed meshes, camera/light/shadow, frame graph | Write project state |
+| `service/` | Persistence/media/renderer/encoder adapters and lifecycle | Second command authority |
+| `mcp/` | Schema-driven tools/resources, job and context adapters | Local state or private rig/drawing algorithms |
 
-  core --> contracts
-  application --> core
-  application --> contracts
-  runtime --> core
-  runtime --> contracts
-  editor --> contracts
-  editor --> core
-  service --> application
-  mcp --> contracts
-  mcp --> application
-  desktop --> service
-  imagehandoff --> contracts
-  imagehandoff --> application
-```
+Drawing renderer backend thực thi cùng brush/tile contract cho UI và MCP;
+device input adapter chỉ cấp points/pressure/tilt chuẩn hóa. Chọn rasterization
+CPU/GPU cần spike và tolerance fixtures trước triển khai; không viết thuật toán
+riêng trong UI, Node và Rust. Source tiles đã import và delta đã commit có thẩm quyền.
 
-Mũi tên `A → B` nghĩa là A được phép import từ B. Không có mũi tên ngược.
+## 3. Allowed dependencies
 
-## Ví dụ logic chung
+- Contracts chỉ phụ thuộc schema library; core phụ thuộc contracts và thuật toán thuần.
+- Application phụ thuộc contracts/core/ports, không React/Three.js hay storage cụ thể.
+- Runtime phụ thuộc contracts/core/Three.js, không React/MCP hoặc project writer.
+- UI gọi service client, contracts và core cho transient preview; không HTTP parsing
+  trong component. MCP cũng gọi cùng service client.
+- Service adapter hiện thực application port. Desktop quản lý native lifecycle,
+  không có reducer rig/timeline/composition khác.
+- UI session giữ tool/selection/panel/playhead; project revision chỉ đổi khi transaction commit.
 
-### Lấy pose tại một frame
+## 4. Một owner cho mỗi logic
 
-- `core/animation/sample-keyframes.ts`: keyframe và easing.
-- `core/animation/sample-clip.ts`: khoảng thời gian của clip.
-- `core/deformation/compose-pose.ts`: kết hợp pose theo thứ tự đã định nghĩa.
-- `runtime/playback/apply-pose.ts`: ánh xạ pose lên buffer/skeleton GPU.
-- Timeline UI và exporter không có bản nội suy riêng.
+### Drawing và gesture
 
-### Rig và mesh
+Input adapter chuẩn hóa pointer, pressure, tilt, zoom/pan mapping. Drawing feature
+sở hữu tool state và overlay; core/drawing sở hữu stroke semantics; runtime thực
+thi raster operation; application ghi tile delta một lần. Stroke cancel không
+commit, retry cùng command ID không tạo stroke thứ hai. Onion skin lấy mẫu exposure
+bằng core; không thêm vào source hoặc export.
 
-- `core/geometry/triangulate-contour.ts`: bọc Earcut, kiểm tra input/output.
-- `core/rig/compute-weights.ts`: thuật toán tạo trọng số.
-- `core/rig/normalize-weights.ts`: chuẩn hóa và kiểm tra tổng.
-- `core/rig/validate-hierarchy.ts`: parent và chu kỳ xương.
-- `features/rig/`: hiển thị và chuyển thao tác thành command.
+### Assembly, mesh và dependency
 
-### Session
+Assets feature chọn/lắp parts và pivot; core/scene quản lý transform; core/geometry
+sửa contour/vertex/edge, core/rig quản lý bind/weights. Application điều phối
+dependency report, preview, commit hoặc cancel rebind. UI và MCP nhận cùng IDs,
+diagnostics và invalidation; không tự remesh khi đổi một property không liên quan.
 
-- `contracts/session/session-info.ts`: một định nghĩa DTO.
-- `services/transport/http-client.ts`: request/response, timeout, lỗi.
-- `services/session/session-client.ts`: token theo một client instance.
-- Component không parse response, giữ global token hay tạo HTTP helper khác.
+### Ba timeline
 
-### Khi module đã lớn
+Timeline primitives chia sẻ ruler, zoom, hit testing và keyboard helpers, không
+gom mọi domain vào một reducer. Drawing exposure, AnimationClip và Sequence có
+command/property contracts riêng; core/animation điều phối thời gian clip, core/
+drawing chọn cel, core/sequence chọn shot. Runtime/export gọi cùng evaluation path.
+Camera route thuộc composition, không thuộc clip nhân vật. Sequence trim không sửa
+clip nguồn. Các API dùng typed targets thay chuỗi property ghi trực tiếp state.
 
-Ví dụ `core/rig/` phát triển thì chia `hierarchy/`, `binding/`, `weights/`, `ik/`.
-Mỗi nhánh có public API nhỏ; không chuyển tất cả vào một `rig-utils.ts` mới.
-Không xuất toàn bộ internal qua barrel gây vòng import hoặc khó tree-shake.
+### Media, service và MCP
 
-### Ảnh do AI client tạo
+Một service giữ project revision có thẩm quyền. Offline mode nếu hỗ trợ cần
+session/authority rõ, không tự tạo state cục bộ thứ hai sau mất kết nối. Reconnect
+query revision/jobs/dependencies trước retry; adapter không tự nhân đôi operation.
+Image generation ở AI client; ingestion/validation qua application ports.
+Encoding và GPU readback không được ghép vào React viewport controller.
 
-- `contracts/images/` sở hữu brief và metadata ảnh, không phụ thuộc tên tool riêng của client.
-- `application/images/` sở hữu yêu cầu sinh ảnh, nhập kết quả và idempotency.
-- `image-handoff/` xử lý truyền file/metadata theo port; không nhúng model sinh ảnh.
-- MCP chỉ chuyển command; công cụ sinh ảnh chạy phía Codex/Antigravity.
-- Chi tiết nằm trong [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md).
+## 5. Ánh xạ source hiện có sang trách nhiệm đề xuất
 
-### Export 2K/4K, 60/120 FPS
-
-- `contracts/export/` là một nguồn cho preset, FPS và codec settings.
-- `core/animation/` lấy pose theo thời gian, độc lập preview/output FPS.
-- `runtime/export/` render frame; `service/adapters/encoding/` xử lý NVENC/FFmpeg.
-- Không hard-code một danh sách resolution/FPS riêng trong UI, MCP và backend.
-- Chi tiết nằm trong [RENDER_PROFILES.md](RENDER_PROFILES.md).
-
-## Ánh xạ từ mã nháp
-
-| Hiện tại | Hướng xử lý sau khi được giao triển khai |
+| Source hiện có | Hướng refactor khi được giao triển khai |
 | --- | --- |
-| `src/App.tsx` | Layout, panel, keyboard binding, orchestration riêng |
-| `src/api.ts` | HTTP client, session và API theo miền |
-| `src/engine/Stage.ts` | Mesh, material, camera, shadow, picking, lifecycle riêng |
-| `shared/model.ts` | Contracts theo miền, validation nghiệp vụ sang core |
-| `shared/animation.ts` | Sampling, pose composition và rig weights riêng |
-| `shared/templates.ts` | Registry và template theo loại asset |
-| `engine/src/main.rs` | Không dồn HTTP/import/render/boot; đánh giá phần shell dùng lại |
-| `engine/src/validation.rs` | Loại bỏ contract viết tay trùng TypeScript khi migrate |
-| `engine/src/store.rs` | Đánh giá atomic persistence; không giữ command trùng service TS |
+| `src/app/EditorContext.tsx` | Tách service session, document context và ephemeral workspace store; bỏ hard-coded clip union |
+| `src/features/timeline/TimelinePanel.tsx` | Tách exposure/clip/sequence adapters; bỏ duration và shot demo cố định |
+| `src/features/stage/scene-composer.ts` | Adapter composition model và runtime; không giữ stage data riêng |
+| `src/features/stage/mesh-builder.ts` | Tái dùng geometry owner, giữ GPU adapter có trách nhiệm rõ |
+| `src/features/stage/weight-painter.ts` | Input/overlay adapter; weight edit policy thuộc core/rig + application |
+| `packages/contracts/src/scene/` | Migrate instance/camera/shot sang owner mới có compatibility adapter |
+| `packages/application/src/projects/project-state.ts` | Registry mới và revision/transaction thống nhất |
+| `packages/core/src/director/script-parser.ts` | Script→shot proposal; không dựng một sequence engine riêng |
 
-Không di chuyển, sửa hoặc xóa các file trên trong lượt chỉ yêu cầu lập kế hoạch.
+Bản source đã có logic và tests cần đánh giá tái dùng. Không gọi toàn bộ source
+là bản nén cũ hoặc viết lại mọi thứ. Mỗi migration giữ import compatibility cần
+thiết có thời hạn, không giữ hai schema owner song song. Không sửa source trong task plan.
 
-## Liên kết
+## 6. Quy tắc triển khai và kiểm tra
 
-- [PLAN.md](PLAN.md) — kế hoạch sản phẩm
-- [CODING_RULES.md](CODING_RULES.md) — quy tắc mã nguồn
-- [COMMAND_BUS.md](COMMAND_BUS.md) — command bus sử dụng application module
-- [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) — pipeline dùng core/runtime
-- [MCP_TOOLS.md](MCP_TOOLS.md) — MCP tools mapping sang application commands
-- [PROJECT_FORMAT.md](PROJECT_FORMAT.md) — schema dữ liệu từ contracts
-- [UI_SPECIFICATION.md](UI_SPECIFICATION.md) — thiết kế UI và icon system
-- [AUTO_RIG.md](AUTO_RIG.md) — auto-rig pipeline và landmark detection
-- [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) — quy trình tạo ảnh và tách layer AI
+Trước khi song song: chốt schema refs/time/clip placement, command boundaries và
+test fixtures. Một file có một write owner. Mỗi source file tối đa 800 dòng, tách
+theo trách nhiệm; geometry lớn chia contour/topology/triangulation, drawing chia
+brush/tiles/exposure/masks, không chuyển vào generic utils.
+
+Nghiệm thu ownership: UI/MCP cùng command tạo cùng state; draw/animate/compose/edit
+không có sampler hoặc time conversion riêng; remesh dùng một dependency validator;
+save/reopen giữ mọi tài liệu và source code dependency graph không có vòng.
+
+Tham chiếu: [PLAN.md](PLAN.md), [CODING_RULES.md](CODING_RULES.md),
+[PROJECT_FORMAT.md](PROJECT_FORMAT.md), [COMMAND_BUS.md](COMMAND_BUS.md),
+[UI_SPECIFICATION.md](UI_SPECIFICATION.md), [TESTING_STRATEGY.md](TESTING_STRATEGY.md),
+[MCP_TOOLS.md](MCP_TOOLS.md), [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md),
+[IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md), [AUTO_RIG.md](AUTO_RIG.md),
+[RENDER_PROFILES.md](RENDER_PROFILES.md).

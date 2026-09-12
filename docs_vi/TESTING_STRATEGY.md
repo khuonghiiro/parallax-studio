@@ -1,341 +1,168 @@
-# Chiến lược kiểm thử
+# Chiến lược kiểm thử studio vẽ và dựng phim
 
-Trạng thái: đề xuất. Hiện có quality gate cho giới hạn source và đồng bộ tài liệu;
-test suite sản phẩm chưa hoàn chỉnh.
-Tài liệu này đặt ra phân loại, chiến lược và tiêu chí cho từng loại test.
+Trạng thái: đề xuất nâng cấp 12/09/2026. Source đã có unit/integration tests trong
+packages và `tests/mcp.integration.ts`; chưa đủ bằng chứng cho workflow studio
+mới. Tài liệu này xác định test cần bổ sung, không tuyên bố chúng đã pass.
 
-## 1. Phân loại test
+## 1. Tầng kiểm tra và bằng chứng
 
-```mermaid
-flowchart LR
-  U[Unit test] --> I[Integration test]
-  I --> V[Visual / Snapshot test]
-  V --> B[Benchmark]
-  B --> E2E[End-to-end / Smoke]
-```
-
-| Loại | Phạm vi | Công cụ dự kiến | Tốc độ |
-| --- | --- | --- | --- |
-| Unit | Một hàm / class, không I/O | Vitest | < 1s per file |
-| Integration | Nhiều module phối hợp | Vitest + mock I/O | < 5s per suite |
-| Visual / Snapshot | So sánh render output | Vitest + canvas snapshot | < 10s per case |
-| Benchmark | Đo hiệu năng | Vitest bench hoặc script | Chạy riêng |
-| E2E / Smoke | App thật, MCP thật | Script + MCP client | Chạy riêng |
-
-## 2. Test theo module
-
-### 2.1 Core — Rig
-
-| Test | Loại | Kiểm tra |
+| Tầng | Phạm vi | Bằng chứng cần lưu |
 | --- | --- | --- |
-| Valid hierarchy | Unit | Topological sort thành công cho tree hợp lệ |
-| Cyclic detection | Unit | Reject bone hierarchy có chu kỳ |
-| Weight normalization | Unit | Tổng weight per vertex = 1.0 ± 0.001 |
-| Max influences | Unit | Reject > 4 bone per vertex |
-| IK solver | Unit | Kết quả IK trong giới hạn, hội tụ |
-| Bind/unbind | Integration | Thêm/xóa binding cập nhật đúng mesh và weights |
+| Unit | Drawing, time, rig, geometry, dependency, composition thuần | Fixtures, invariant và kết quả xác định |
+| Integration | Command, media, transaction, persistence, service/MCP | State/revision, side effects, lỗi và recovery |
+| UI workflow | Bút/chuột/phím, panels, timelines, composition | Recording hoặc trace; không chỉ screenshot đẹp |
+| Visual | Cel alpha, mesh bend, light/shadow, camera và export | Golden theo renderer, tolerance đã giải thích |
+| Hardware | Windows/Linux, RTX 3060 12 GB, encoder | OS/driver/backend, workload, p50/p95, RAM/VRAM |
+| E2E | Vẽ→rig→clip→compose→sequence→video, có MCP | Project fixture mở lại được và media probe |
 
-### 2.2 Core — Animation
+Các test mới phải bảo vệ hành vi thật, không chỉ kiểm tra nút tồn tại hoặc mock
+mọi thuật toán. Một task chỉ chạy checks liên quan; release chạy đầy đủ workflow
+đã cam kết. Không coi không có test là feature đạt nghiệm thu.
 
-| Test | Loại | Kiểm tra |
-| --- | --- | --- |
-| Keyframe interpolation | Unit | Linear, ease-in, ease-out, cubic cho kết quả đúng |
-| Clip sampling | Unit | Lấy mẫu tại boundary, giữa, ngoài clip range |
-| Time → frame mapping | Unit | `frameIndex / fps` cho mọi preset FPS |
-| 120 FPS frame count | Unit | 1 giây → 120 frame, không trùng timestamp |
-| Hold keyframe | Unit | Giữ giá trị giữa hai key cùng value |
+## 2. Drawing, exposure và tablet
 
-### 2.3 Core — Deformation
+- Tạo DrawingDocument với raster/group/mask/reference layers; reorder, merge có
+  preview, lock, clipping và opacity giữ alpha đúng sau save/reopen.
+- Brush/eraser/fill/selection-transform tác động đúng cel/layer và tôn trọng mask,
+  lock. Raster kết quả dùng cùng semantics qua UI và MCP.
+- Stroke 200 pointer samples chỉ tạo một transaction/undo entry; undo/redo khôi
+  phục pixels. Cancel, pointer capture loss, chuyển tab hoặc mất focus không để
+  stroke nửa chừng. Kiểm tra cả bút pressure và chuột không pressure.
+- Pressure/tilt capability không hỗ trợ phải có fallback rõ. Calibration test gồm
+  pan/zoom/rotation, high DPI, nhanh/chậm, palm/touch policy; không suy ra tablet
+  latency từ thời gian dispatch command.
+- Linked cel sửa mọi exposure dùng cùng ID; duplicate cel sửa độc lập. Hold, blank,
+  insert/delete/ripple exposure đúng duration; không chồng exposure trong layer.
+- Onion skin chỉ preview; một giây vẽ 12 cel tại 12 FPS vẫn là 12 cel khi xuất 60
+  hoặc 120 FPS, camera chuyển động giữa các exposure vẫn lấy mẫu theo output FPS.
+- Tile delta undo có bounded memory; nhiều stroke không giữ texture/worker rác.
 
-| Test | Loại | Kiểm tra |
-| --- | --- | --- |
-| Deformation order | Integration | Warp → morph → skinning → transform cho kết quả đúng |
-| Warp grid identity | Unit | Grid không offset → vertex không đổi |
-| Morph topology guard | Unit | Reject morph giữa mesh khác topology |
-| Morph additive | Unit | Hai morph targets cộng đúng |
-| Preview = Export | Integration | Cùng time, cùng pipeline → cùng pose output |
+## 3. Assembly, mesh, rig và dependency
 
-### 2.4 Core — Views
-
-| Test | Loại | Kiểm tra |
-| --- | --- | --- |
-| View selection | Unit | Góc → đúng view ID |
-| Hysteresis | Unit | Lắc nhẹ quanh boundary không nhảy view |
-| Missing view | Unit | Thiếu góc → cảnh báo, giữ view cũ |
-| View switch updates | Integration | Đổi view → mesh, texture, shadow đều cập nhật |
-
-### 2.5 Application — Command Bus
-
-| Test | Loại | Kiểm tra |
-| --- | --- | --- |
-| Dispatch → state change | Unit | Command handler cập nhật state đúng |
-| Undo/Redo | Integration | Inverse command khôi phục state |
-| Batch atomicity | Integration | Lỗi giữa batch → rollback tất cả |
-| Revision increment | Unit | Mỗi commit tăng revision lên 1 |
-| Conflict detection | Unit | baseRevision không khớp → reject hoặc merge |
-| Idempotent retry | Unit | Cùng commandId → không tạo entity trùng |
-
-### 2.6 Runtime — Render
-
-| Test | Loại | Kiểm tra |
-| --- | --- | --- |
-| Frame output size | Visual | Đúng resolution theo profile |
-| Shadow follows pose | Visual | Bóng cập nhật khi pose thay đổi |
-| Alpha silhouette | Visual | Bóng theo alpha, không phải hình chữ nhật |
-| Normal map lighting | Visual | Normal map thay đổi phản ứng ánh sáng |
-
-### 2.7 Export
-
-| Test | Loại | Kiểm tra |
-| --- | --- | --- |
-| Frame count | Integration | N giây × F FPS = đúng số frame |
-| Timestamp accuracy | Integration | Frame timestamps đều và chính xác |
-| Encoder probe | Integration | Phát hiện NVENC, fallback software |
-| Cancel job | Integration | Hủy → giải phóng buffer, không file corrupt |
-| Resolution match | Integration | Output file đúng kích thước pixel |
-
-### 2.8 MCP
-
-| Test | Loại | Kiểm tra |
-| --- | --- | --- |
-| Tool → command mapping | Integration | MCP call → đúng application command |
-| Schema validation | Unit | Input sai schema → lỗi rõ ràng |
-| Idempotent import | Integration | Cùng requestId → cùng assetId |
-| Batch execute | Integration | Nhiều tool trong batch → atomic |
-| UI/MCP consistency | Integration | Cùng command từ UI và MCP → cùng state |
-
-### 2.9 Asset Creation / Decomposition
-
-| Test | Loại | Kiểm tra |
-| --- | --- | --- |
-| Layer alpha validity | Unit | Alpha thật (RGBA), không phải nền caro vẽ sẵn |
-| Halo/fringe detection | Unit | Mép layer không có fringe từ nền cũ |
-| Canvas alignment | Unit | Mọi layer cùng canvas size với ảnh gốc |
-| Layer composite | Integration | Tất cả layer ghép lại khớp ảnh gốc (PSNR/SSIM) |
-| Overlap coverage | Integration | Vùng nối (vai-thân, đùi-hông) có đủ pixel phủ |
-| Occluded fill | Integration | Phần bị che đã vẽ bù, không lộ khoảng trống khi xoay bone |
-| Part naming | Unit | Tên layer đúng quy ước (head, torso, left-arm...) |
-| Pivot at joint | Unit | Pivot đặt tại khớp tự nhiên, không ở tâm bounding box |
-| Draw order valid | Unit | Draw order hợp lệ, không trùng index |
-| Import idempotent | Integration | Cùng source hash → không nhân đôi layer |
-| Flatten rejection | Unit | Ảnh flatten (1 layer) → cảnh báo chưa tách |
-
-### 2.10 Multi-View Consistency
-
-| Test | Loại | Kiểm tra |
-| --- | --- | --- |
-| Height consistency | Unit | Chiều cao nhân vật giữa views sai khác ≤ 5% |
-| Color palette match | Visual | Tông da, tóc, quần áo nhất quán (ΔE ≤ threshold) |
-| Part name matching | Unit | Cùng tên bộ phận giữa mọi view của asset |
-| Pivot alignment | Unit | Pivot cùng ý nghĩa (cổ, vai, hông) khớp vị trí tương đối |
-| Draw order per view | Unit | Mỗi view có draw order riêng, hợp lệ |
-| View angle label | Unit | Góc nhìn ghi đúng (front, quarter-left, side...) |
-| Missing view warning | Unit | Thiếu góc bắt buộc → cảnh báo, không block |
-| View switch pivot stable | Integration | Chuyển view không nhảy pivot hoặc lệch vị trí nhân vật |
-| Costume consistency | Visual | Trang phục, phụ kiện, hoa văn nhất quán giữa views |
-| Topology compatibility | Unit | Views dùng morph phải có cùng vertex count + indices |
-
-### 2.11 Mesh Generation
-
-| Test | Loại | Kiểm tra |
-| --- | --- | --- |
-| Contour from alpha | Unit | Alpha sạch → contour khớp silhouette, không lệch |
-| Contour simplification | Unit | Douglas-Peucker giảm vertex nhưng PSNR contour ≥ threshold |
-| Triangulation valid | Unit | Không degenerate triangles (area > 0), không overlap |
-| UV mapping accuracy | Unit | UV coords khớp texture, không lệch pixel |
-| Vertex density zones | Unit | Vùng khớp có nhiều vertex hơn vùng tĩnh |
-| Edge loop placement | Integration | Edge loop tại vị trí khớp → deform mượt hơn khi test pose |
-| Mesh density modes | Unit | low/medium/high cho vertex count trong khoảng dự kiến |
-| Mesh preview render | Integration | Wireframe overlay đúng vị trí trên texture |
-| Mesh refine additive | Integration | Thêm vertex ở vùng chỉ định không phá mesh hiện tại |
-| Mesh validate pass | Unit | Mesh hợp lệ không có degenerate/overlap/UV lỗi |
-| Contour fail on noise | Unit | Alpha bẩn (caro, fringe) → cảnh báo, không tạo mesh rác |
-
-### 2.12 Auto-Rig
-
-| Test | Loại | Kiểm tra |
-| --- | --- | --- |
-| Landmark minimum count | Unit | Thiếu landmarks bắt buộc → lỗi rõ ràng |
-| Landmark duplicate | Unit | Hai landmarks cùng vị trí → cảnh báo |
-| Auto-skeleton hierarchy | Unit | Skeleton sinh ra acyclic, bones có length > 0 |
-| Bone symmetry | Unit | Left/right bones length sai khác ≤ 10% → OK, > 10% → cảnh báo |
-| Auto-weights normalized | Unit | Tổng weight per vertex = 1.0 ± 0.001 |
-| Auto-weights max influences | Unit | ≤ 4 bone per vertex |
-| Layer-aware weights | Integration | Vertex thuộc layer arm bind vào arm bone, không spine |
-| Auto-weights no orphan | Unit | Không có vertex với tất cả weights = 0 |
-| Skeleton preview render | Integration | Skeleton overlay đúng vị trí trên nhân vật |
-| Test pose after auto-rig | Integration | Xoay bone ±45° → deformation hợp lý, không rách |
-| Landmark adjust → reskeleton | Integration | Sửa landmark → skeleton cập nhật đúng |
-
-### 2.13 Rig-Ready Image Templates
-
-| Test | Loại | Kiểm tra |
-| --- | --- | --- |
-| Template schema valid | Unit | Rig-Ready Template JSON hợp lệ, proportions đầy đủ |
-| Proportions → landmarks | Unit | Proportions × image size → tọa độ pixel chính xác |
-| Apply template one-step | Integration | `apply_rig_template` → landmarks + skeleton + weights |
-| Template prompt includes hint | Unit | basePrompt + promptHint có trong brief sinh ảnh |
-| Drag-adjust real-time | Integration | Kéo landmark → skeleton + weights cập nhật ngay |
-| Drag does not reset others | Unit | Kéo 1 landmark không đổi vị trí landmarks khác |
-| Chibi proportions different | Unit | Template chibi head ≈ 35% height, khác humanoid |
-| Template mismatch warning | Unit | Ảnh không khớp tỷ lệ template → cảnh báo |
-| Template list includes defaults | Unit | list_rig_templates trả ≥ 6 templates mặc định |
-
-### 2.14 Animation Templates
-
-| Test | Loại | Kiểm tra |
-| --- | --- | --- |
-| Template schema valid | Unit | Template JSON hợp lệ, có đủ required fields |
-| Template skeleton match | Unit | Template humanoid chỉ áp lên skeleton humanoid |
-| Retarget scale | Unit | Nhân vật to hơn → translation scale tỷ lệ |
-| Missing bone fallback | Unit | Bone trong template không có → giữ rest pose |
-| Extra bone untouched | Unit | Bone trong nhân vật không trong template → rest pose |
-| Loop animation | Integration | Loopable template: frame cuối = frame đầu (smooth) |
-| Template preview | Integration | Áp template → preview animation đúng |
-| Template adjust | Integration | Sửa keyframe sau áp → lưu đúng, undo hoạt động |
-
-## 3. Test contract: Preview = Export
-
-Đây là test quan trọng nhất cho tính nhất quán. Phương pháp:
-
-1. Tạo scene có rig, animation, camera, light.
-2. Render frame tại `time = T` bằng preview pipeline.
-3. Render frame tại `time = T` bằng export pipeline.
-4. So sánh pixel output:
-   - Vị trí mesh: identical.
-   - Màu sắc: cho phép sai khác anti-aliasing ≤ 2 pixel ở mép.
-   - Shadow: cùng vị trí và hình dáng.
-
-Test này phải chạy cho ít nhất 3 time points khác nhau (đầu, giữa, cuối clip).
-
-## 4. Benchmark protocol
-
-### Hardware chuẩn
-
-- GPU: NVIDIA RTX 3060 12 GB VRAM
-- Ghi kèm: CPU, RAM, driver version, OS
-
-### Workload tham chiếu
-
-Theo PLAN mục 7:
-- 10 nhân vật có rig (mỗi nhân vật ~50 bone, ~20 morph targets)
-- 20 layer và đạo cụ
-- 1 đèn đổ bóng
-- Camera orthographic
-
-### Metrics cần đo
-
-| Metric | Preview | Export |
-| --- | --- | --- |
-| Frame time p50 | ✅ | ✅ |
-| Frame time p95 | ✅ | ✅ |
-| Total render time | — | ✅ |
-| Encode time | — | ✅ |
-| RAM usage | ✅ | ✅ |
-| VRAM usage | ✅ | ✅ |
-| Encoder used | — | ✅ (NVENC / software) |
-
-### Quy tắc báo cáo
-
-- Không suy hiệu năng từ VRAM specification đơn thuần.
-- Không gọi export offline là "preview 4K/120 thời gian thực".
-- Ghi rõ driver version vì NVENC capabilities phụ thuộc driver.
-- Benchmark Windows và Linux riêng biệt.
-
-## 5. CI pipeline
-
-### Gate chặn merge (required)
-
-1. **Source limits**: `node scripts/quality/check-source-limits.mjs`
-   — Không file > 800 dòng, không dòng > 120 ký tự.
-2. **Documentation sync**: `node scripts/quality/check-doc-sync.mjs`
-   — Mọi tài liệu có đủ cặp, revision/hash hiện hành; tài liệu cần cho feature
-   phải được review ngữ nghĩa trước khi code.
-3. **TypeScript strict**: `tsc -b --noEmit`
-   — Không lỗi type.
-4. **Unit + Integration tests**: `vitest run`
-   — Tất cả pass.
-5. **Prettier check**: `prettier --check .`
-   — Format đúng.
-
-### Gate cảnh báo (advisory)
-
-6. **Import graph check**: Kiểm tra dependency boundaries theo module map.
-7. **Clone detection**: Phát hiện code trùng lặp.
-8. **Benchmark regression**: So sánh frame time với baseline.
-
-### Chưa triển khai trong lượt này
-
-- ESLint config cho dự án.
-- Import boundary checker tự động.
-- Clone detector (jscpd hoặc tương đương).
-- CI runner (GitHub Actions / GitLab CI).
-
-Xem [CODING_RULES.md](CODING_RULES.md) mục 6 cho danh sách đầy đủ gate dự kiến.
-
-## 6. Cross-platform testing
-
-| Hệ điều hành | Kiểm tra thêm |
+| Fixture | Invariant |
 | --- | --- |
-| Windows | NVENC driver, đường dẫn có dấu cách/Unicode, atomic write trên NTFS |
-| Linux | Mesa/NVIDIA driver, file permissions, FFmpeg binary path |
+| Part layer assembly | Pivot và world transform ổn định khi reparent; cycle bị từ chối |
+| Contour holes/concavity/islands | Mesh giữ silhouette, hole không bị lấp; không triangle ngoài miền |
+| Degenerate/self-intersecting contour | Diagnostic rõ; không crash hoặc silently publish mesh |
+| Mesh editing | Add/delete/move vertex, edge và density sửa đúng vùng; UV không nhảy bất ngờ |
+| Rigid/skinned parts | Rigid theo bone; skinned có rest/bind đúng, tối đa 4 influence |
+| Weights | Giữ top 4 trước normalize; tổng 1 ± 0.001; zero/orphan/nonfinite báo lỗi |
+| Joint pose suite | Gập elbow/knee, twist/tail và extreme pose không flip triangle ngoài ngưỡng fixture |
+| Rest pose / IK | Rest matrix/inverse bind đúng; hierarchy acyclic, giới hạn IK rõ |
+| Remesh / change bone rest | Báo stale weights/morph/clip, preview rebind, cancel giữ bản cũ |
+| Asset source replacement | IDs giữ khi tương thích, report nơi dùng; không tự xóa track mất target |
 
-- Không suy một OS đã đạt từ OS còn lại.
-- Test cùng workload tham chiếu trên cả hai.
-- Ghi rõ OS version, GPU driver version trong báo cáo.
+Dùng silhouette có lỗ, tay chồng thân, chi hẹp, lông/tóc alpha và animal để tránh
+chỉ test nhân vật demo thuận lợi. Test landmark template keys/version chung
+UI/MCP. Mức tự động thành công phải đo; không coi contour heuristic là hiểu anatomy.
 
-## 7. Test file organization
+## 4. Clip và ba miền thời gian
 
-```text
-tests/
-  unit/
-    rig/
-      hierarchy.test.ts
-      weights.test.ts
-    animation/
-      interpolation.test.ts
-      sampling.test.ts
-    deformation/
-      warp.test.ts
-      morph.test.ts
-      pipeline-order.test.ts
-    asset/
-      layer-alpha.test.ts
-      canvas-alignment.test.ts
-      part-naming.test.ts
-      pivot-placement.test.ts
-      draw-order.test.ts
-    views/
-      view-selection.test.ts
-      height-consistency.test.ts
-      pivot-alignment.test.ts
-      topology-compatibility.test.ts
-  integration/
-    command-bus.test.ts
-    preview-export-consistency.test.ts
-    mcp-tools.test.ts
-    export-pipeline.test.ts
-    layer-composite.test.ts
-    overlap-coverage.test.ts
-    view-switch-stability.test.ts
-  visual/
-    shadow-accuracy.test.ts
-    render-output.test.ts
-    color-palette-match.test.ts
-    costume-consistency.test.ts
-  benchmark/
-    preview-frametime.bench.ts
-    export-throughput.bench.ts
+- AnimationClip mở/sửa ở animate không cần composition. Tạo walk, blink độc lập;
+  auto-key tắt không ghi pose, test pose không sửa rest pose.
+- Hai instance dùng một clip ở offset/rate khác nhau; sửa placement không sửa
+  source hoặc instance khác. Edit Clip cập nhật nơi dùng có báo; Make Unique tách ID.
+- Key/curve interpolation, step/hold, channel masks, blend, loop seam, clip trim
+  và root motion đúng. Không áp world travel hai lần.
+- Exposure grid, film ticks và output samples chuyển đổi qua một owner. Half-open
+  interval kiểm ở trước/bằng/sau biên. Không duplicate frame cuối.
+- Rate hữu tỉ, source-in offset, negative/zero invalid speed và export range không
+  align đều có hành vi xác định. Không round silently.
+- Preview/export tại cùng timestamp có cùng cel ID, key values, pose/vertex,
+  camera matrix, shot và subtitle/audio timing.
+
+## 5. Composition và sequence
+
+- Lắp tối thiểu foreground/midground/background, character và prop ở depth planes;
+  drag/drop, parenting, pivot, snapping, visibility/lock giữ đúng khi mở lại.
+- Perspective camera route pan/dolly/aim qua các lớp tạo parallax thật. Orthographic
+  không tự scale theo Z. Nếu dùng artistic parallax, test operator được lưu rõ.
+- Split stage/camera views chọn cùng object; camera framing, safe area, path handles
+  và keyframe editing không ghi nhầm camera preview vào camera phim.
+- Hai shot của cùng composition dùng camera khác; sequence trim/ripple/cut/dissolve
+  không đổi asset hoặc clip nguồn. Thiếu transition handles phải báo.
+- Audio sample range/rate, gain/fade và subtitle intervals đúng sau cut/retime;
+  mute/solo preview có scope rõ. Scrub không nhân đôi audio source.
+- Export selection/range giữ đúng start/end, shot order, transitions và sync.
+  Save/reopen giữ mọi dependency, kể cả reusable library đã tách project nguồn.
+
+## 6. Command, MCP và khôi phục
+
+- UI/MCP cùng payload tạo cùng state, diagnostics, revision và undo behavior.
+- Một transaction/batch commit tăng revision một lần; save/query/preview không
+  tăng content revision. Stroke/drag commit một lần; lỗi batch không partial publish.
+- ID retry cùng payload trả kết quả cũ; ID giống payload khác bị từ chối. Reconnect
+  query revision/job trước retry, không tạo bản sao asset/stroke/clip/shot.
+- Stale base revision, missing/stale/incompatible target trả structured error có
+  owner/ID và hướng rebind; không apply nhầm selection đang mở ở UI.
+- MCP biết active document/workspace capability, có explicit target IDs cho write;
+  contextual selection chỉ là gợi ý. Tool preview trả ảnh/resource và diagnostics
+  để AI tự kiểm tra. Không mặc định chức năng UI nào cũng có tool đã hoạt động.
+- Job timeout/disconnect/cancel/resume không bỏ process/texture/upload rác; completed
+  job trỏ artifact thật, không chỉ URL preview hoặc status thành công.
+- Kiểm canonical path, symlink/root escape, MIME/dimensions/quotas, corrupt media,
+  import chunk replay và shell-argument injection.
+- Crash injection trước/sau generation publish và trong migration giữ một project
+  nhất quán; backup không bị ghi đè. Save concurrent edit vẫn dirty đúng revision.
+
+## 7. Visual parity và render output
+
+Chọn cùng snapshot revision, source hashes, quality/profile và timestamp; so sánh
+cel/pose/vertex/camera state chính xác hoặc tolerance số đã định nghĩa. Pixel image
+dùng golden riêng theo renderer/backend cùng tolerance perceptual/alpha-edge;
+không yêu cầu byte-identical giữa GPU/driver khác nhau.
+
+Test mốc đầu/giữa/cuối và mọi boundary clip/exposure/shot. Bao gồm alpha silhouette
+shadow, deformed mesh shadow, transparency sorting, normal color-space và camera
+route; overlay selection/onion skin/gizmo không xuất vào phim.
+
+Probe output thật: dimensions, codec, pixel format/color tags, total frames,
+timestamps, audio sample count và A/V duration. 2K phải ghi preset chính xác
+2560×1440 hoặc 2048×1080; 4K UHD là 3840×2160. Test 60/120 FPS riêng từng preset;
+120 FPS output không hứa render real-time. Khi encoder không hỗ trợ, báo fallback
+và profile kết quả rõ, không âm thầm hạ FPS/resolution.
+
+## 8. Benchmark và usability
+
+Baseline gồm: canvas 2048×2048 với 20 layer/100 cel; asset 20 parts với 50 bones;
+composition 10 rigged instances + 20 props + 3 depth planes + 1 shadow light;
+sequence 60 giây có 3 shot, audio và subtitle. Đây là workload đề xuất để đo,
+không là giới hạn sản phẩm hoặc số hiệu năng đã đạt.
+
+Ghi OS, CPU, driver, GPU backend, viewport resolution và chất lượng trước đo.
+Đo pointer-to-visible latency p50/p95, frame time p50/p95, dropped preview frames,
+mesh/rebind duration, peak RAM/VRAM, export throughput và cancellation latency.
+Mục tiêu ban đầu preview 60 FPS tương ứng 16.7 ms/frame; giới hạn latency/memory
+cuối phải chốt sau spike. Regression >10% so baseline cùng máy cần phân tích.
+Đo Windows và Linux riêng; kết quả một máy không chứng nhận mọi môi trường.
+
+Usability test cho người mới hoàn thành: vẽ 3 cel/hold; lắp 5 part/gắn rig; lưu
+2 clip; dựng 3 depth planes/camera route; cắt 2 shot và xuất video. Ghi task success,
+thời gian, lỗi chọn nhầm context và thao tác cần trợ giúp. Kiểm keyboard, focus,
+disabled/error/empty, resizing và high DPI. Tablet cần test thiết bị thật.
+
+## 9. Gate và nguồn lệnh
+
+Các lệnh đã khai báo cần chạy theo scope và báo kết quả thật:
+
+```sh
+node scripts/quality/check-source-limits.mjs
+node --test scripts/quality/source-limits.test.mjs
+node scripts/quality/check-doc-sync.mjs
+node --test scripts/quality/doc-sync.test.mjs
+npm run check
+npm test
+npm run test:mcp
 ```
 
-Test files thuộc cùng quy tắc source limits: tối đa 800 dòng, đọc được.
-Test dài chia theo test case, không dồn vào một file.
+Không gọi script benchmark/UI E2E là đã tồn tại nếu chưa kiểm file. Lưu unit test
+cạnh owner như source hiện có; E2E fixtures/recordings tách khỏi production.
+Mỗi source test tối đa 800 dòng. Dependency/duplicate checks, visual fixtures,
+tablet và hardware tests là hạng mục bổ sung có owner; không chỉ viết vào DoD rồi
+coi đã enforced. Gate tài liệu so revision/hash/tokens không chứng minh bản dịch đúng nghĩa.
 
-## 8. Liên kết
-
-- [PLAN.md](PLAN.md) mục 7 — mốc nghiệm thu và test quan trọng
-- [RENDER_PROFILES.md](RENDER_PROFILES.md) mục 6 — tiêu chí chấp nhận render
-- [CODING_RULES.md](CODING_RULES.md) mục 6 — gate tự động
-- [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) mục 7 — test contract
-- [COMMAND_BUS.md](COMMAND_BUS.md) — test undo/redo và batch
-- [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) — luồng tách thành phần và tạo bộ góc
+Tham chiếu: [PLAN.md](PLAN.md), [PROJECT_FORMAT.md](PROJECT_FORMAT.md),
+[MODULE_MAP.md](MODULE_MAP.md), [UI_SPECIFICATION.md](UI_SPECIFICATION.md),
+[COMMAND_BUS.md](COMMAND_BUS.md), [MCP_TOOLS.md](MCP_TOOLS.md),
+[AUTO_RIG.md](AUTO_RIG.md), [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md),
+[RENDER_PROFILES.md](RENDER_PROFILES.md), [CODING_RULES.md](CODING_RULES.md).

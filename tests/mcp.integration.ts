@@ -1,4 +1,5 @@
 import { createMcpServer } from '../mcp/server.js';
+import { resetApplicationService } from '@parallax/application';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -6,6 +7,7 @@ import {
 
 async function runIntegrationTest(): Promise<void> {
   console.log('--- Starting MCP Server Integration Test ---');
+  resetApplicationService();
   const { server } = createMcpServer();
 
   // Test 1: List tools

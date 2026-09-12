@@ -236,7 +236,7 @@ in 2D deformation requires a standard mesh topology similar to edge loops in 3D.
 
 ## ADR-009: Two-mode UI architecture (Setup / Animate), Command Bus, and standard icon system
 
-**Status:** accepted
+**Status:** partially superseded by ADR-010 (the two-mode Setup/Animate layout is superseded by ADR-010; Command Bus and standard icon specifications remain accepted)
 
 **Context:**
 2D/2.5D animation filmmaking software has a very large toolset (mesh drawing, bone creation,
@@ -252,7 +252,7 @@ system icons on Windows/macOS/Linux fragment the interface and are inconsistent 
    - **Animate Mode**: Dedicated to timeline animation, dopesheet, curves/graph, props,
      camera, lights, and shot preview.
 2. Every UI operation (button click, vertex drag, bone rotation, or keyframe placement) emits
-   a command through the Command Bus and corresponds exactly to the AI's MCP tools.
+     a command through the Command Bus and corresponds exactly to the AI's MCP tools.
 3. Standardize the Icon System:
    - Priority 1: Use the open-source Lucide Icons library (24×24 outline strokes,
      `currentColor`, ISC license).
@@ -275,6 +275,42 @@ system icons on Windows/macOS/Linux fragment the interface and are inconsistent 
 
 **References:** [UI_SPECIFICATION.md](UI_SPECIFICATION.md),
 [COMMAND_BUS.md](COMMAND_BUS.md), [MCP_TOOLS.md](MCP_TOOLS.md).
+
+---
+
+## ADR-010: Five dedicated workspaces (Draw, Rig, Animate, Compose, Edit) replacing two-mode Setup / Animate architecture
+
+**Status:** proposed
+
+**Context:**
+The two-mode Setup / Animate model in ADR-009 concentrated too many responsibilities into each mode:
+Setup combined drawing layers, mesh deformation, and bone rigging; Animate combined asset animation,
+multiplane scene composition, camera staging, and film cut assembly. This mixed asset and shot
+keyframes on the timeline, provided poor support for frame-by-frame cel drawing workflows, and
+blurred the distinction between the master asset (AssetDefinition) and its placed scene instance (AssetInstance).
+
+**Decision:**
+1. Replace the two-mode design with five dedicated workspaces within a single project:
+   - `draw`: Raster drawing, layer management, cels, exposure sheets, and onion skinning.
+   - `rig`: Mesh editing (manual/automatic contour preserving interior holes), skeleton hierarchy, weights, and test poses.
+   - `animate`: Creating and refining reusable AnimationClips for assets (dope sheet, curves, cels).
+   - `compose`: 2.5D multiplane staging, AssetInstance placement, camera routes, and lighting/shadows with dual simultaneous viewers (Stage Perspective/Top/Side and Final Camera View).
+   - `edit`: Complete film editing (Sequence assembly, Shot trimming and splitting, audio tracks, subtitles, and render/export queue).
+2. Retain the validity of the unified Command Bus and standardized icon system (Lucide + custom inline SVG) established in ADR-009.
+
+**Rationale:**
+- Clearly demarcates data ownership and operational boundaries between drawing, rigging, asset animation, scene staging, and film editing.
+- Completely resolves keyframe collision between character animation and camera/shot editing.
+- Enables clip reuse across multiple instances with independent time offsets without modifying source assets.
+- Aligns directly with the full 2.5D filmmaking pipeline from artwork generation to final export.
+
+**Consequences:**
+- UI layout, shell navigation, and command routing are reorganized around five stable workspace IDs: `draw`, `rig`, `animate`, `compose`, `edit`.
+- Timelines are modularized into three specialized adapters: Exposure sheet (`draw`), Clip dope sheet/curves (`animate`), and Sequence timeline (`edit`).
+- Viewport supports dual viewing in Compose (Stage 3D view and Camera framing view).
+- ADR-009 is marked partially superseded (two-mode layout replaced; Command Bus and icon system retained).
+
+**References:** [UI_SPECIFICATION.md](UI_SPECIFICATION.md), [PLAN.md](PLAN.md) sections 2 and 4, [PROJECT_FORMAT.md](PROJECT_FORMAT.md), [MODULE_MAP.md](MODULE_MAP.md).
 
 ---
 

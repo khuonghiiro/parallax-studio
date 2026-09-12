@@ -1,220 +1,190 @@
-# Create Images with the AI Client and Import Assets through MCP
+# Drawing, image preparation, and 2D layers
 
-Status: the requirement is included in the plan; the connector has not yet been
-implemented in the app.
+Status: proposed upgrade dated 12/09/2026. Geometry/rig code exists;
+drawing and editing capabilities below require separate acceptance. This document
+replaces the import-image-then-auto-rig-only workflow.
 
-## 1. Responsibilities
+## 1. Objects and workspaces
 
-Codex/Antigravity uses the image-generation and image-editing tools available in
-the working session. Parallax provides MCP tools to prepare a brief, read
-references, receive results, manage layers and views, build meshes, and rig
-assets. The default flow does not install a local image-generation model or
-require an additional app-specific image API key.
-
-The agent is the orchestrator. The MCP server cannot implicitly call an
-internal client tool in the reverse direction. Each client needs an available
-image-generation tool and artifact-transfer mechanism; do not hard-code the
-name of one specific tool into the shared protocol.
-
-The current Codex session has an image-generation tool in its tool catalog.
-Antigravity documentation also describes an integrated image-generation tool;
-actual availability still depends on the client and working session.
-[Antigravity Models][anti-models].
-
-## 2. Default workflow
-
-1. The user asks in Codex/Antigravity, for example, to create a character and a
-   4K/60 FPS film.
-2. The agent reads the project, style, and references and obtains a brief from a
-   Parallax MCP tool.
-3. The agent calls the client's image-generation tool and then inspects the
-   actual result.
-4. The agent calls the Parallax image-import tool, receives an asset ID, and
-   receives a validation report.
-5. The agent adds views, layers, and materials, creates the mesh and rig,
-   renders a test pose, and corrects it when necessary.
-6. When the asset meets requirements, the agent places it in a shot and exports
-   the film through MCP tools.
-
-The image-generation button in the UI may prepare a request for the agent to
-read. If no supported agent-launch connection exists, the UI must state that it
-is waiting for the agent; it must not display a generating state.
-
-## 3. Brief data
-
-- Generation request ID, target asset ID, and project revision.
-- Asset type, description, style, color palette, and readable references.
-- Viewing angle, neutral pose, and body proportions to preserve between images.
-- Image format, desired alpha, desired dimensions, and safe-padding region.
-- Required layers or parts, plus bone names and semantics when a rig already
-  exists.
-- A distinction between artwork color/alpha and a scene normal map or shadow.
-- A **Rig-Ready Template**, when present: skeleton type, standard pose
-  (T-pose/A-pose), body proportions, and a `promptHint` that is automatically
-  added to the AI prompt. When an image is generated from the template,
-  auto-rig runs immediately after import. See [AUTO_RIG.md](AUTO_RIG.md)
-  section 2.4 for the schema and default template set.
-
-The brief requests flat lighting when later relighting is required and limits
-pre-painted background shadows. Use an approved reference image as the basis
-for later generations and edits. Repeating the same prompt does not by itself
-guarantee that the character retains the same characteristics.
-
-## 4. Tools and image transfer
-
-The names below are proposed APIs, not a catalog of tools that is already
-operational:
-
-| Tool | Result |
+| Object | Meaning |
 | --- | --- |
-| `asset.prepare_image_brief` | Brief and reference for the agent to generate or edit an image |
-| `asset.import_image` | Asset ID, actual dimensions, alpha, and source hash |
-| `asset.attach_view` | Attach a result to an asset's viewing angle |
-| `asset.attach_layer` | Attach an image or mask to a named part |
-| `asset.validate_artwork` | Report missing layers/views and image problems |
-| `asset.get_preview` | Preview for visual inspection by the agent |
+| `DrawingDocument` | Source canvas, dimensions, color, and layer tree |
+| `DrawingLayer` | Raster, group, or mask layer with name, visibility, lock, transform |
+| `Cel` | A versioned raster drawing that multiple exposures may share |
+| `Exposure` | A cel hold interval; blank differs from continued hold |
+| `AnimationClip` | Reusable animation with exposure and/or rig tracks |
+| `AssetDefinition` | Shared artwork, optional rig, and clips |
+| `AssetInstance` | One asset placement in a `Composition` with independent playback |
+| `Composition` | Space for layers/instances, cameras, and lights |
+| `Shot` | An interval using a composition and selected camera |
+| `Sequence` | Shot order and film editing tracks |
 
-- On the same machine, import the file returned by the image tool from a path
-  that both the agent and service can read.
-- On different machines, or when the artifact exists only in the client,
-  transfer it through a chunked upload with a hash. Do not assume that a cloud
-  path exists on the user's computer.
-- Do not treat a thumbnail URL or an image displayed in chat as an imported
-  source.
-- Send small metadata through JSON. Send large images through files or uploads
-  rather than repeating base64 for the entire image set on every pose edit or
-  command call.
-- Import must be idempotent by request ID and source hash so that retries do not
-  duplicate assets.
+These are design terms per [PROJECT_FORMAT.md](PROJECT_FORMAT.md), not a claim
+that all types exist. Workspace IDs are `draw`, `rig`, `animate`,
+`compose`, `edit` per [UI_SPECIFICATION.md](UI_SPECIFICATION.md).
+Static assets and frame-by-frame drawings do not require rigging.
 
-## 5. Output validation
+## 2. Drawing and artwork workspace
 
-- Read the actual dimensions, MIME type, and alpha; do not fully trust the file
-  name or the agent's description.
-- A checkerboard drawn into the image does not count as transparency.
-- A flattened image does not automatically become separate layers. The app or
-  agent must separate or generate each part and validate occluded regions,
-  pivots, and overlap before rigging.
-- Validate the angle set for consistent clothing, colors, proportions, viewing
-  direction, and part names.
-- An image for a character that fills the screen requires a different pixel
-  budget from a small prop.
-- If the tool produces only a small image, disclose the source dimensions; do
-  not call an upscale a detailed 4K original. A 4K video output does not
-  automatically increase texture detail.
-- Record the source/reference and image version so that the texture can be
-  replaced while retaining the rig.
+The `draw` workspace has a central canvas, left tool strip, right layer tree/
+properties, and accessible colors/brush presets. Cel editing shows an exposure
+strip below identifying clip, layer, cel, and a breadcrumb back to animation.
 
-## 6. Part Decomposition for Animation
+- Raster first: brush, eraser, eyedropper, fill, lasso/rectangle selection,
+  move/scale/rotate selection, and canvas zoom/pan/rotate.
+- Brush settings include size, opacity, hardness, spacing, stabilization, pressure
+  curve. Supported pens control size/opacity by pressure; mouse uses defaults.
+  Tilt and advanced customizable brush engines are later work.
+- Fill supports tolerance, contiguous mode, active/visible-layer sampling, and
+  an explicit write target; it never silently alters every layer.
+- Layers support rename, reorder, group, duplicate, hide, lock, alpha lock,
+  clipping masks, opacity, transforms, nondestructive masks. Initial blend modes:
+  Normal, Multiply, Screen; unsupported import modes are reported.
+- Selection, brush outlines, and onion skins are overlays, not artwork.
+  Locked layers/masks visibly disable write tools.
+- A stroke/transform is one undo item: session preview, then commit through the
+  application transaction shared with MCP. Cancellation discards staged changes.
+- Undo stores dirty regions/tiles and restores pixels/bounds; do not copy entire
+  canvases for each pointer event.
+- SVG can be imported and rasterized at a chosen resolution, retaining originals.
+  Full vector editing, Bézier, path booleans, and vector tweening are later work.
 
-A 2D character must be divided into separate layers for rigging and animation.
-A flattened image, which has only one layer, cannot be rigged directly and must
-be decomposed first.
+## 3. Cels and exposures
 
-### 6.1 Standard parts for a human character
+The `animate` workspace owns the clip timeline; `draw` edits the selected cel.
+Switching preserves relevant time/selection without writing to another instance.
 
-```text
-Level 1 — Main groups:
-  ├── head          Head, including hair and ears
-  ├── torso         Upper body
-  ├── pelvis        Pelvis
-  ├── left-arm      Left arm, shoulder to wrist
-  ├── right-arm     Right arm
-  ├── left-leg      Left leg, thigh to ankle
-  └── right-leg     Right leg
+1. Create an asset clip and choose a drawing cadence.
+2. Create a blank cel or duplicate a drawing; drag exposures to hold.
+3. Draw, enable previous/next onion skins, scrub, and loop the work range.
+4. Combine exposures with rig/transform tracks and preview the asset independently.
+5. Place multiple instances in a composition with offset playback.
 
-Level 2 — Details, when required by the animation:
-  head/
-    ├── face        Face: skin and line work
-    ├── eyes        Eyes, optionally separated into left and right
-    ├── eyebrows    Eyebrows
-    ├── mouth       Mouth
-    ├── nose        Nose
-    ├── hair-front  Hair in front of the face
-    └── hair-back   Rear hair, drawn behind the head
-  left-arm/
-    ├── upper-arm   Upper arm
-    ├── forearm     Forearm
-    └── hand        Hand
-  left-leg/
-    ├── thigh       Thigh
-    ├── shin        Shin
-    └── foot        Foot
-```
+Exposures use half-open intervals in the project timebase, without pixel interpolation.
+Linked exposures share edits to one cel; independent copying is explicit.
+The X-sheet/dope sheet supports blank, duplicate, hold, split hold, move, trim,
+extend, and range selection. Blank differs from holding the previous drawing.
 
-This list is a recommendation. A character may need other parts such as a tail,
-wings, cape, or accessories. Part names must remain consistent across all views
-of the same asset.
+Onion skin offers previous/next counts, colors, opacity, active-layer filtering;
+distinct neighboring cels are the default so long holds do not repeat an overlay.
+Drawing at 12/24 FPS or on twos/threes is independent of 60/120 FPS output;
+camera/rig tracks interpolate at output rate, without promised automatic in-betweens.
+Instance retiming does not rewrite source clips; in/out, loop, speed share one contract.
 
-### 6.2 Part-decomposition workflow
+## 4. AI image creation and artifact import
 
-```mermaid
-flowchart TD
-  A["Complete character image"] --> B{"Are layers already available?"}
-  B -->|PSD / already separated| C["Import each layer"]
-  B -->|Flattened| D["Separate manually or with AI"]
-  D --> D1["Generate each part separately"]
-  D --> D2["Or use masks / selections to extract parts from the original image"]
-  D1 --> E["Validate every layer"]
-  D2 --> E
-  C --> E
-  E --> F["Set the pivot for each part"]
-  F --> G["Define draw order"]
-  G --> H["Validate overlap and occluded regions"]
-  H --> I["Attach to the asset, ready for rigging"]
-```
+AI clients generate/edit using available capabilities; the app ingests through MCP.
+Do not add a default local model/API key. MCP servers cannot implicitly invoke
+client image tools in reverse.
 
-### 6.3 Technical requirements for each part layer
+1. Briefs include request ID, revision, style/reference, dimensions, expected alpha,
+   target layer/view, and artwork proportions.
+2. The agent generates, inspects the actual image, and imports a file or hashed upload.
+3. The app validates and returns IDs/revision/diagnostics/preview.
+4. Artwork enters `draw` for masks, hidden-region repair, pivots, and layout.
+5. Choose cel animation, rigid cutout, or deform mesh to suit the content.
 
-| Requirement | Description |
+The brief UI reports waiting for an agent without supported client invocation.
+AI images do not guarantee alpha, layers, or consistent views. Manual import/
+drawing remains usable without generation capability.
+Actual tools/payloads belong to [MCP_TOOLS.md](MCP_TOOLS.md). Large rasters use
+artifacts or bounded uploads, not repeated base64 per pen sample.
+
+## 5. Validation and source preservation
+
+- Validate actual MIME, dimensions, alpha, decompressed size, and hash. Painted checkerboards are not alpha.
+- Track provenance per artifact/view/layer, originals, and revisions. Retry does not duplicate.
+- Cloud paths are not local paths. Enforce file/upload access and quotas;
+  never trust filenames or shell arguments from MCP.
+- Show pixel budget against camera crop; 4K output adds no detail to small images.
+- Preserve source canvas, crop offset, and pivot. UVs use the actual texture and
+  crop/atlas transform, not contour bounds stretched across a whole texture.
+- PSD imports supported raster layers and reports unsupported groups/masks/blends;
+  no silent flattening; preserve originals for controlled reimport.
+- Save/reopen/export preserves alpha, masks, colors, and cel/exposure relationships.
+
+## 6. Part assembly
+
+Flattened artwork can bind rigidly or deform as one mesh. Separate layers are
+needed for independent part occlusion, pivots, and motion; do not claim that
+single-layer images cannot be rigged.
+
+Layer assembly offers shared-canvas placement, snapping/pivots, reference overlays,
+isolate/solo, and head/torso/limb/tail/wing groups as appropriate.
+Select masks/lassos to create parts or generate them individually; repair hidden
+regions and test overlap across poses. Cropped canvases retain offsets; matching
+canvas dimensions are not mandatory.
+
+Per-view draw order is internal to an asset; composition instance depth is a
+separate spatial coordinate. Pivots follow joints/semantics with numeric/drag edits.
+Post-bind pivot edits report rig/clip impact without silently shifting artwork.
+
+## 7. Multiple views
+
+One view suffices for a shot using one direction. Add front, quarter-left/right,
+side-left/right, or back only when required. Approve a design reference and check
+clothing, proportions, colors, hidden regions, pivots, and layer names per view.
+
+Each view owns artwork/mesh/binding with shared semantic bone mapping.
+Default to discrete whole-asset switching at explicit keys. Vertex morphing requires
+correspondence, compatible topology revision, and indices. Independent head/body
+switching is later work.
+
+## 8. Automatic and manual meshes
+
+The `rig` workspace follows Artwork → Mesh → Bones → Bind → Test Pose.
+Choose rigid cutout or deform mesh per layer; not every prop needs dense geometry.
+
+1. Alpha/mask extraction with previewable threshold/tolerance.
+2. Detect every connected component, outer ring, and hole.
+3. Clean duplicates, self-intersections, orientation, degenerate edges.
+   Simplification must not close holes or join disconnected components.
+4. Triangulate valid polygons; insert constrained points/edges through a verified backend.
+5. Texture/crop UVs, wireframe/diagnostics, then repair, bind, and test poses.
+
+Earcut processes polygon rings/holes; arbitrary Poisson points fed into Earcut
+are not constrained triangulation. Choose refinement through a fixture, license,
+and benchmark spike before settling a library.
+
+Required tools: vertex/edge/triangle selection, box/lasso, move, add/delete vertex,
+split edge, constrained edge, local retriangulation, boundary locks, joint-region
+density, quality overlay. Validation blocks invalid indices/UVs, zero area, filled
+holes, self-intersections, inverted triangles; invalid meshes are not success.
+Density and refinement provide control, not a guarantee of eliminating pinching.
+
+## 9. Artwork and topology replacement
+
+Repainting with unchanged canvas/topology may reuse binding after validation.
+Alpha changes do not regenerate automatically; flag silhouette mismatches for review.
+Vertex/index, UV, rest-pose, or crop changes produce a dependency impact report.
+
+Choose to retain the old version, preview rebind/retarget, or create a new asset
+revision. Weights/morphs/clips referencing old topology require repair; never truncate
+arrays or reuse new vertex indices without mapping.
+Undo restores artifacts, mesh, binding, and dependency status together.
+
+## 10. Acceptance and performance
+
+| Stage | Completion criteria |
 | --- | --- |
-| Transparent alpha | The background must be truly transparent (RGBA), not a solid background color |
-| Clean edges | No halo or fringe from the old background around the part |
-| Overlap | A part must extend a few pixels into a connection area, such as shoulder into torso or thigh into pelvis, to avoid a gap when the bone rotates |
-| Canvas dimensions | Use the same canvas size as the original image so that parts align when stacked |
-| File / layer name | Use the conventional part name, such as head, torso, or left-arm |
-| Pivot | Place it at the natural rotation joint: shoulder, elbow, hip, knee, or neck |
+| Drawing foundation | 3 layers, draw/erase/fill/lasso/mask, undo/redo, save/reopen retaining pixels/structure |
+| Cel animation | 12 cels with hold/blank/link/copy, onion skin; 60/120 FPS preserves exposures |
+| Layer assembly | Cutout character and static prop; correct pivots/overlap; controlled source update |
+| Mesh repair | Donut, islands, thin alpha, bent-joint fixtures; correct holes/UVs, invalid meshes blocked |
+| Film handoff | Two instances of one asset with offset clips in a multi-depth composition and camera pan |
 
-### 6.4 Two decomposition methods
+Measure stroke latency, dirty-tile upload, undo memory, texture residency, thumbnails
+on 2048/4096 canvases with 1/8/32 layers. Experimental target: p95 preview response
+below 50 ms on a published fixture; unmeasured, not a promise of 120 FPS on every 4K canvas.
+Use dirty tiles, revision caches, undo budgets, and cancellable jobs.
 
-**Method 1 — Generate each part separately:**
-The agent asks AI to create one part at a time while preserving the same style,
-proportions, and reference. This method is suitable when detailed control is
-required. Its challenge is consistency across separate generations.
+## 11. Current state and links
 
-**Method 2 — Extract parts from a full-body image:**
-The agent asks AI to create a strong full-body image, then separates it with
-masks or selections. AI may generate a mask for each region. This method is
-suitable when the full-body image already meets requirements. Its challenge is
-that occluded areas, such as the torso behind an arm, must be painted in.
+Inspection on 12/09/2026: contour extraction returns empty holes and follows the
+first outer component; triangulation uses contour-bounds UVs. These are repair/
+test gaps, not the target algorithm.
 
-**General rules:**
-- A flattened image is not a layer set. It must be decomposed explicitly.
-- Import every part as a separate layer through `asset.attach_layer`.
-- Validate the composite: stacking all layers must reproduce the original
-  image.
-- Occluded regions require additional artwork behind the foreground part. For
-  example, complete the torso behind an arm and the legs behind a garment. If
-  these regions are not filled in, rotating a bone exposes empty space. The
-  agent generates the missing artwork or uses the client's image-editing tool
-  to complete it.
-
-### 6.5 Draw order and overlap
-
-```text
-Typical draw order, back to front:
-
-  0  hair-back            Rear hair
-  1  right-arm (rear)     Right arm behind the torso
-  2  right-leg (rear)     Right leg behind
-  3  torso                Torso
-  4  pelvis               Pelvis
-  5  left-leg             Left leg in front
-  6  left-arm             Left arm in front
-  7  head                 Head
-  8  hair-front           Hair in front of the face
-  9  accessories          Accessories: hat, glasses, and so on
-```
-
-Draw order changes by view. At a quarter angle, the arm nearer the camera moves
-forward and the farther arm moves behind. Each view defines its own draw order.
+- [AUTO_RIG.md](AUTO_RIG.md): binding, weights, test poses.
+- [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md): cel/clip sampling and rendering.
+- [UI_SPECIFICATION.md](UI_SPECIFICATION.md): workspaces and interactions.
+- [PROJECT_FORMAT.md](PROJECT_FORMAT.md): contracts and migration.

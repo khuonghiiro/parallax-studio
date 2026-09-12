@@ -1,308 +1,172 @@
-# Project format and data schemas
+# Project format for 2D drawing and 2.5D filmmaking
 
-Status: proposed design for implementation in Milestones 0–1. There is not yet an official
-schema in the source; this document defines the direction and constraints to finalize during
-implementation.
+Status: proposed upgrade dated 12/09/2026; not an implemented schema.
+Source already contains manifest, asset, scene, clip and shot contracts in
+`packages/contracts/src/`, with state in `packages/application/src/projects/`.
+The following contracts replace the simple scene/timeline model in the plan;
+migration and real fixtures are required before changing users' saved data.
 
-## 1. On-disk project directory structure
+## 1. Documents and ownership
 
-```text
-<project-root>/
-  manifest.json            Metadata, schema version, asset registry
-  assets/
-    <asset-id>/
-      source/              Original images (PNG, PSD layers), normal maps, masks
-      views/               Images/layers for each viewing angle
-      landmarks.json       Joint-point coordinates (chin, wrist, knee...) for auto-rig
-      rig.json             Bone hierarchy, weights, bindings
-      mesh.json            Contours, triangulation, UVs, edge loops
-      material.json        Tint, normal-map reference, roughness
-      meta.json            Name, tags, provenance (AI brief, reference hash)
-  scenes/
-    <scene-id>/
-      scene.json           Instance list, camera, lights, depth, shots
-      timeline.json        Tracks, clips, keyframes
-  cache/                   Regenerable data
-    thumbnails/            Small previews for the asset browser
-    atlas/                 Packed texture atlases
-    render/                Intermediate frames for the running job
-  history/                 Undo history (depending on strategy; see COMMAND_BUS)
-```
+| Proposed contract | Contents and boundary |
+| --- | --- |
+| `DrawingDocument` | 2D canvas, color system, drawing rate, layer tree, cel library; independently editable |
+| `DrawingLayer` | Raster, group, mask or reference; order, opacity, blend, lock and exposure |
+| `Cel` | One drawing with an ID; tiles/blobs, bounds, pivot and revision, not a timestamp |
+| `Exposure` | Holds a cel or leaves a blank over a layer's frame interval |
+| `AssetDefinition` | Reusable asset: parts, views, pivots, rig, mesh, material, drawing refs, clips |
+| `AnimationClip` | Independent named motion with duration, tracks, exposures and asset-local bindings |
+| `AssetInstance` | One asset placement with independent transform, overrides and clip placements |
+| `Composition` | 2.5D stage: node tree, depth planes, instances, camera routes, lights, receivers |
+| `Shot` | A composition take: camera, source range and take-specific overrides |
+| `Sequence` | Film edit: shot placements, transitions, audio, subtitles and export range |
 
-### Principles
+Workspaces `draw`, `rig`, `animate`, `compose`, `edit` open these documents;
+they do not create five project copies. Selection, active tool, onion skin, panel
+layout and playhead are session state and do not increase content revision.
 
-- `manifest.json` is the only entry point; opening a project starts by reading this file.
-- All of `cache/` can be deleted without losing source data. The app recreates it when needed.
-- Asset IDs and scene IDs use UUID v4, not file names or incrementing indices.
-- Child directory and file names use English slugs and contain no special characters other
-  than `-_`.
-- Paths in the manifest use `/` (forward slash) and are relative to the project root.
+## 2. Registry, references and time
 
-## 2. Manifest schema
+Manifest stores project ID, schema version, content revision and drawing, asset,
+clip, composition, shot, sequence and media registries. Use stable UUIDs, never
+display names or array indices for links. `EntityRef` has `kind`, `id`, `revision`;
+component references add `subId`. Bound entity revision need not equal global
+revision. `status` values are `valid`, `stale`, `missing`, `incompatible`.
 
-This is a draft. The official schema will be defined with Zod in
-`packages/contracts/src/project/`, with JSON Schema generated from it.
+Film time uses integer ticks and a persisted `timebase` in ticks/second; FPS uses
+a `numerator` / `denominator` pair. Choose a timebase representing supported
+rates and audio samples exactly; never accumulate float deltas. Intervals are
+half-open `[startTick, endTick)`; endpoints add no frame. Output frame n occurs at
+rational time n/outputFPS. Export duration must align with an output-frame boundary;
+otherwise UI/MCP offers explicit snap choices and resulting durations, never silent rounding.
 
-```jsonc
-{
-  // Manifest schema version, used for migration
-  "schemaVersion": 1,
+`drawingFps` belongs to DrawingDocument and defines its exposure grid, such as
+12 or 24. Exposures use inclusive `startFrame` and exclusive `endFrameExclusive`,
+mapped to document time. Exporting at 120 FPS does not turn 12 drawings/second
+into 120 drawings: cels hold while camera and rig sample at 120 timestamps.
+Never interpolate cels automatically.
 
-  // Metadata
-  "name": "Sample short film",
-  "createdAt": "2026-09-11T04:00:00Z",
-  "updatedAt": "2026-09-11T04:30:00Z",
+## 3. DrawingDocument, DrawingLayer, Cel and Exposure
 
-  // Global revision, incremented after every successful command commit
-  "revision": 42,
+DrawingDocument stores pixel dimensions, color profile, origin, layer tree and
+source media. Groups are acyclic; masks declare targets and clipping scope.
+Reference layers reject brushes; locked layers reject mutations. Raster cels
+preserve original alpha and bounds.
 
-  // Asset registry
-  "assets": {
-    "<asset-id>": {
-      "name": "Main character",
-      "type": "character",         // character | prop | background
-      "directory": "assets/<asset-id>",
-      "views": ["front", "quarter-left", "quarter-right"],
-      "hasRig": true,
-      "sourceHash": "sha256:abcdef...",
-      "createdRevision": 5,
-      "updatedRevision": 38
-    }
-  },
+Multiple exposures may reference one cel. Editing a linked cel affects all users
+and the UI must disclose scope; duplication creates an independent ID. Gaps mean
+blank, not infinite hold. Exposures on one layer cannot overlap. Holds and frame
+insertion/deletion are explicit mutations. Onion skin is preview only, never cel
+data or export content.
 
-  // Scene registry
-  "scenes": {
-    "<scene-id>": {
-      "name": "Opening scene",
-      "directory": "scenes/<scene-id>",
-      "createdRevision": 10,
-      "updatedRevision": 42
-    }
-  },
+V1 uses editable raster cels. Vector paths/symbols are a future versioned layer
+type; do not promise vector authoring from pixel-only strokes. Brush metadata
+contains preset/version, spacing, pressure mapping and canvas transform; source
+tiles are authoritative output. Aggregate preview samples, then commit one tile
+delta and undo entry. Cancel/pointer capture loss leaves no partial committed stroke.
 
-  // Default settings
-  "defaults": {
-    "timelineFps": 24,
-    "previewFps": 60,
-    "exportProfile": "4k-uhd-60"   // References a preset name in RENDER_PROFILES
-  }
-}
-```
+## 4. AssetDefinition, mesh and rig
 
-### Schema-version rules
+Asset categories are character, animal, prop, background and effect; animals may
+use dedicated templates. Parts reference drawing layers/cels or media by ID and
+revision; each view has origin, pivot and draw order. Assembly retains transforms,
+acyclic parenting and visibility without flattening source. Instances do not share mutable pose.
 
-- `schemaVersion` is an incrementing integer that starts at 1.
-- When opening a project with a `schemaVersion` older than the version supported by the app,
-  run an automatic migration, create a backup of the old manifest
-  (`.manifest.v<N>.bak.json`), and log the changes.
-- When opening a project with a newer `schemaVersion`, report a clear error and do not attempt
-  to parse it.
-- A migration must not lose data. A removed old field must have an explicit mapping to the new
-  structure in the migration function.
+Each part binds as `rigid` or `skinned`. Mesh stores contour/hole constraints,
+vertices, indices, UVs, topology revision and algorithm/version. Rig stores local
+rest transforms, inverse bind matrices, bone IDs, limits and landmark template
+version. Skin allows at most 4 influences/vertex; keep the top 4 then normalize
+to 1 within tolerance 0.001; uninfluenced vertices are reported or explicitly bound.
+Weights/morphs record compatible topology revisions. Landmark keys belong to
+template versions, with no separate UI/MCP lists.
 
-## 3. Asset data
+Per-artifact provenance includes hash, alpha convention, color-space, dimensions,
+brief and references when present. Large blobs use binary files with checksum/schema
+metadata, never large base64 images in JSON. Mesh errors provide diagnostics and
+highlighted regions for manual correction.
 
-### Layers and views
+Changes to contours, vertices, UVs, views or bone parents/rest pose produce
+clip/instance/shot dependency reports. Never silently reuse old weights/morphs or
+delete tracks with missing targets. Offer retaining the old version, previewed
+rebind, or regeneration with a recoverable copy.
 
-Each view (viewing angle) of an asset contains:
+## 5. AnimationClip and ClipPlacement
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `viewId` | string | Angle name: `front`, `quarter-left`, `side-left`, `back` |
-| `layers` | Layer[] | Ordered list of layers in draw order |
-| `pivot` | `{ x, y }` | Origin in texture coordinates, in pixels |
-| `drawOrder` | number[] | Layer indices in drawing order |
+Clips contain asset-local tracks for bone/part transform, deformers, visibility,
+views and exposures. Tracks use typed target/property/value schemas, never
+arbitrary property strings writing objects. Bindings contain entity/component IDs,
+rig/topology revisions and compatibility signatures; matching bone names do not
+authorize automatic retargeting.
 
-Each layer contains:
+`ClipPlacement` references a clip and target instance: start/end ticks, source in,
+playback rate, loop mode, blend weights and channel mask. Trim/offset/speed edits
+only the placement. Edit Clip discloses all users; Make Unique creates a new ID.
+Walk and blink combine on separate channels; same-channel overlaps have deterministic
+priority/blend rules. Clip-local motion and world travel are separate; never apply
+root motion twice.
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `layerId` | string | UUID |
-| `name` | string | Descriptive name: `head`, `torso`, `left-arm` |
-| `colorPath` | string | Color-image path relative to the asset directory |
-| `alphaMaskPath` | string? | Used when alpha is separate from the color image |
-| `normalMapPath` | string? | Optional normal map |
-| `bounds` | `{ x, y, width, height }` | Position and size within the asset canvas |
+Animate preview needs no composition. Test poses/playhead do not edit rest pose;
+auto-key must be explicitly enabled. Library entries package dependency IDs/revisions
+for validated relinking without temporary source paths in other projects.
 
-### Rig
+## 6. Composition, Shot and Sequence
 
-```jsonc
-{
-  "bones": [
-    {
-      "boneId": "bone-001",
-      "name": "spine",
-      "parentId": null,             // null = root bone
-      "position": { "x": 0, "y": 0 },  // local offset from parent, in pixels
-      "rotation": 0,                // radians, local
-      "length": 50                  // pixels
-    }
-  ],
-  "bindings": [
-    {
-      "layerId": "layer-001",
-      "boneId": "bone-001",
-      "weights": [/* per-vertex weights */]
-    }
-  ]
-}
-```
+Composition nodes have `parentId`, local transform and depth-plane reference.
+Agree world units, axes and handedness with runtime; depth plane, in-plane draw
+order and camera Z are distinct. Reparenting can preserve world transform and
+rejects cycles. Lock, visibility, preview solo and cast/receive shadow differ.
 
-Invariants:
-- The hierarchy must be acyclic; validate it with a topological sort when loading.
-- Each vertex has at most four bone influences; weights are normalized to a total of 1.0.
-- The rest pose is the state before animation is applied and is stored separately for each view.
+Camera rigs have ID, projection, lens/zoom, clipping, target and route tracks.
+Routes store timed keys/control points, orientation/aim, interpolation/ease; preview
+paths, camera frame and safe area. Perspective creates depth parallax; orthographic
+projection does not scale by Z automatically. Artistic parallax factors must be
+explicit persisted operators shared by preview/export.
 
-### Landmarks
+Shot references composition revision, camera, source range and shot-local overrides.
+Overrides do not modify source; multiple shots view one composition through
+different cameras. `ShotPlacement` stores shot ref, sequence range, source in and transition.
 
-Used by the Mixamo-style Auto-Rig workflow; see [AUTO_RIG.md](AUTO_RIG.md):
+Sequence has video tracks, `AudioClip`, `SubtitleCue`. Audio stores media ref,
+source sample range/rate, gain, fade and mute; subtitles store text, language,
+style and tick range. Dissolves require handles on both sides; report shortages.
+Waveforms/proxies are cache; original media is source. Sequence export range is
+independent of clip authoring duration.
 
-```jsonc
-{
-  "templateId": "humanoid-v1",
-  "status": "confirmed",            // estimated | confirmed | manual
-  "points": {
-    "chin": { "x": 512, "y": 280 },
-    "neck": { "x": 512, "y": 320 },
-    "left_shoulder": { "x": 420, "y": 360 },
-    "right_shoulder": { "x": 604, "y": 360 },
-    "left_elbow": { "x": 360, "y": 480 },
-    "right_elbow": { "x": 664, "y": 480 },
-    "left_wrist": { "x": 310, "y": 600 },
-    "right_wrist": { "x": 714, "y": 600 },
-    "left_knee": { "x": 460, "y": 750 },
-    "right_knee": { "x": 564, "y": 750 },
-    "left_ankle": { "x": 450, "y": 920 },
-    "right_ankle": { "x": 574, "y": 920 }
-  }
-}
-```
+## 7. Save, migration and recovery
 
-### Mesh
+The proposed layout contains a manifest pointer, generation registry with drawings/
+assets/clips/compositions/shots/sequences, hash-addressed media, recovery and cache.
+Save captures one consistent revision, writes new generation/media, verifies hashes
+and publishes the manifest last. Test flush/atomic replacement on Windows/Linux;
+crashes must still allow opening the previous generation. Save updates persisted
+revision without increasing content revision. Edits during saving remain dirty.
+One transaction/batch increments content revision once.
 
-```jsonc
-{
-  "contours": [/* array of contour points */],
-  "vertices": [/* coordinates after triangulation */],
-  "indices": [/* triangles */],
-  "uvs": [/* UVs corresponding to vertices */],
-  "edgeLoops": [/* arrays of vertex indices that form loops around joints */],
-  "topology": "earcut-v1"          // Identifies the triangulation method
-}
-```
+Migration writes a new copy alongside a full backup and reports mappings before
+publication. Current inclusive endFrame converts to exclusive in the old document's
+frame unit, not output FPS. Old scenes map to Composition; retain IDs when unambiguous.
+Never guess missing FPS/parents/clip targets: open recovery for relinking. Newer
+schemas open read-only only with a safe reader, otherwise reject them.
 
-## 4. Scene data
+Autosave defaults to 2 minutes into separate recovery storage; compare revision/time
+before recovery and never silently overwrite source. Undo stack is session data;
+recovery uses separate snapshots/journals. Cache is disposable; drawing tiles/rigs/
+meshes/clips/media are not cache.
 
-```jsonc
-{
-  "instances": [
-    {
-      "instanceId": "inst-001",
-      "assetId": "<asset-id>",
-      "position": { "x": 0, "y": 0, "z": 0 },  // z = depth
-      "scale": { "x": 1, "y": 1 },
-      "rotation": 0
-    }
-  ],
-  "camera": {
-    "type": "orthographic",         // orthographic | perspective
-    "position": { "x": 0, "y": 0, "z": 100 },
-    "zoom": 1,
-    "near": 0.1,
-    "far": 1000
-  },
-  "lights": [
-    {
-      "lightId": "light-001",
-      "type": "directional",
-      "direction": { "x": -1, "y": -1, "z": -1 },
-      "color": "#ffffff",
-      "intensity": 1.0,
-      "castShadow": true
-    }
-  ],
-  "shadowReceivers": [
-    {
-      "type": "plane",
-      "normal": { "x": 0, "y": 1, "z": 0 },
-      "offset": -100
-    }
-  ]
-}
-```
+Paths are relative; validate canonical paths/symlinks/MIME/dimensions/quotas before I/O.
+External relinking uses hashed import; MCP cannot escape roots. Library publication
+copies or pins all dependencies; deleting the source project cannot orphan library assets.
 
-## 5. Timeline and animation
+## 8. Acceptance and references
 
-```jsonc
-{
-  "duration": 10.0,                 // seconds
-  "tracks": [
-    {
-      "trackId": "track-001",
-      "targetType": "instance",     // instance | camera | light
-      "targetId": "inst-001",
-      "clips": [
-        {
-          "clipId": "clip-001",
-          "startTime": 0.0,
-          "endTime": 5.0,
-          "keyframes": [
-            {
-              "time": 0.0,          // seconds, relative to startTime
-              "property": "position.x",
-              "value": 0,
-              "easing": "ease-in-out"
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
+- Save/reopen preserves linked cels, holds, pivots, rigs, clips, compositions, camera
+  routes, shots, audio/subtitles and dependency revisions.
+- Two instances use one clip at different offsets; editing one placement changes neither source clip nor other instance.
+- Remeshing marks stale bindings; cancel restores state; rebind leaves no orphan tracks.
+- One second drawn at 12 FPS exports exactly 60/120 frames with the same 12 cels and timing.
+- Crashes at every save/migration step recover one consistent generation.
 
-Timeline time is always measured in seconds. Convert to a frame index with
-`frameIndex = time × fps`. See [RENDER_PROFILES.md](RENDER_PROFILES.md) for the three
-types of FPS and the sampling method.
-
-## 6. Saving and opening a project
-
-### Save
-
-1. Serialize the current state to JSON according to the schema.
-2. Write a temporary file (`<file>.tmp`) and then rename it atomically to prevent corruption
-   if a crash occurs mid-write.
-3. Update the `revision` in the manifest.
-4. Write caches (thumbnail, atlas) separately; they do not block saving.
-
-### Load
-
-1. Read `manifest.json` and check `schemaVersion`.
-2. Migrate if needed (see section 2).
-3. Validate references: every asset ID in a scene must exist in the manifest.
-4. Lazy-load textures and meshes; do not read every image into RAM when opening the project.
-5. Report a specific error for a missing file, invalid ID, or unsupported schema version.
-
-### Autosave and recovery
-
-- Autosave periodically (every two minutes by default) into a separate temporary directory.
-- When opening a project, if an autosave is newer than the manifest, ask the user whether to
-  restore it.
-- Never silently overwrite the original project with an autosave.
-
-## 7. Source versus cache
-
-| Type | Examples | Can be deleted? | Stored in VCS? |
-| --- | --- | --- | --- |
-| Source | Original images, rig, mesh, scene, timeline | ❌ | ✅ |
-| Cache | Thumbnails, atlases, temporary render frames | ✅ | ❌ (.gitignore) |
-| History | Undo stack, snapshot | Depends on policy | ❌ |
-
-## 8. References
-
-- [PLAN.md](PLAN.md) sections 5 and 7 — project-format requirements
-- [COMMAND_BUS.md](COMMAND_BUS.md) — how revision and undo interact with project saving
-- [MODULE_MAP.md](MODULE_MAP.md) — `packages/contracts/src/` owns schemas, and
-  `apps/service/src/adapters/persistence/` owns I/O
-- [AUTO_RIG.md](AUTO_RIG.md) — landmark and auto-rig format details
-- [UI_SPECIFICATION.md](UI_SPECIFICATION.md) — UI interaction with the project structure
+References: [PLAN.md](PLAN.md), [COMMAND_BUS.md](COMMAND_BUS.md),
+[MODULE_MAP.md](MODULE_MAP.md), [AUTO_RIG.md](AUTO_RIG.md),
+[UI_SPECIFICATION.md](UI_SPECIFICATION.md), [RENDER_PROFILES.md](RENDER_PROFILES.md),
+[TESTING_STRATEGY.md](TESTING_STRATEGY.md).

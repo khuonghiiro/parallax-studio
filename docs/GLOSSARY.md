@@ -43,6 +43,11 @@ The camera's visible region in a scene, defined by its type
 parallax and the safe area.
 → [PLAN.md](PLAN.md) section 4.
 
+### Cel
+A distinct raster drawing with a stable identifier in the cel library. A cel can
+be held across multiple frames through different Exposures.
+→ [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 3, [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) section 3.
+
 ### Clip
 An animation segment on a track with a start time, an end time, and a list of
 keyframes. A clip can be reused by multiple instances.
@@ -59,6 +64,11 @@ The single orchestration layer for every state change. Both UI and MCP dispatch
 commands through it. It is responsible for validation, execution, history, and
 revision.
 → [COMMAND_BUS.md](COMMAND_BUS.md).
+
+### Composition
+A 2.5D staging space containing a node hierarchy tree, depth planes, AssetInstances,
+camera routes, and lighting/shadows.
+→ [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 6, [UI_SPECIFICATION.md](UI_SPECIFICATION.md) section 7.
 
 ## D
 
@@ -77,6 +87,11 @@ The order in which layers in an asset are drawn. A layer with a higher draw
 order is drawn over a lower layer. Each view has its own draw order.
 → [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 3.
 
+### DrawingDocument
+A 2D drawing document containing canvas dimensions, color profile, origin, and layer
+tree (DrawingLayer). It can be opened and edited independently or linked to an asset.
+→ [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 3, [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) section 2.
+
 ## E
 
 ### Easing
@@ -85,6 +100,11 @@ ease-out, or cubic Bezier. It defines how quickly a value changes over time.
 → [MODULE_MAP.md](MODULE_MAP.md) — `core/animation/`.
 
 ### Export FPS → see Output FPS.
+
+### Exposure
+A duration interval (measured in frames or ticks) holding a specific Cel or remaining
+blank on a DrawingLayer.
+→ [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 3, [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) section 3.
 
 ## F
 
@@ -203,9 +223,14 @@ conflict detection, export snapshots, and undo tracking.
 ## S
 
 ### Scene
-A staging space containing instances, a camera, lights, and shadow receivers.
-Each scene has its own timeline.
-→ [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 4.
+A 2.5D staging space (see also [Composition](#composition)). In the revised project format,
+Composition is the formal entity managing depth planes, instances, and camera routes.
+→ [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 6.
+
+### Sequence
+A complete edit assembling a timeline series of Shots, accompanied by audio tracks
+and subtitle cues.
+→ [PROJECT_FORMAT.md](PROJECT_FORMAT.md) section 6, [UI_SPECIFICATION.md](UI_SPECIFICATION.md) section 8.
 
 ### Shadow proxy
 A simple auxiliary mesh used to create a shadow with a greater sense of volume
@@ -274,6 +299,12 @@ containing cell. It is used for subtle face turns and squash/stretch.
 Weights that determine how much each bone influences each vertex. A vertex is
 influenced by no more than four bones. The weights for each vertex sum to 1.0.
 → [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) section 2, step 3.
+
+### Workspace
+A specialized UI layout and toolset dedicated to a specific creative stage within
+a single project (`draw`, `rig`, `animate`, `compose`, `edit`). Switching workspace does
+not alter or fragment project state.
+→ [UI_SPECIFICATION.md](UI_SPECIFICATION.md) section 2, [PLAN.md](PLAN.md) section 2.
 
 ### World space
 The scene's shared coordinate space. Its origin is at the scene center, with

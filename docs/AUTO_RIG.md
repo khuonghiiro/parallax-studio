@@ -1,270 +1,166 @@
-# Parallax Studio — 2D Auto-Rigging & Mesh Topology Standard
+# Rigging, binding, and asset animation
 
-This document specifies the Mixamo-style 2D automated rigging pipeline, landmark detection system,
-anatomical mesh topology standards (edge loops), and motion template retargeting.
+Status: proposed upgrade dated 12/09/2026. Auto-rig is editable assistance;
+it does not guarantee accurate joint detection or appealing motion for every image.
+Schemas/tools are settled in [PROJECT_FORMAT.md](PROJECT_FORMAT.md) and
+[MCP_TOOLS.md](MCP_TOOLS.md), not independent APIs in this document.
 
-## 1. 2D Auto-Rigging vs. 3D Mixamo
+## 1. Separate artwork, rig, and clip
 
-| Feature | 3D Mixamo | Parallax 2D Auto-Rig |
+An `AssetDefinition` contains artwork, optional rig, and `AnimationClip`.
+An `AssetInstance` references the source and plays clips in a `Composition`;
+editing its pose does not change every instance's rest pose or clip.
+
+The `draw` workspace edits artwork/cels, `rig` edits meshes/bones/binds,
+`animate` authors clips. `compose` places cameras/layers/lights; `edit`
+assembles `Shot` objects in a `Sequence`. Cels and static props need no skeleton.
+
+| Binding | Use | Required data |
 | --- | --- | --- |
-| Input Format | 3D Mesh (FBX / OBJ) | Decomposed 2D layers + planar triangle meshes |
-| Marker Calibration | 5–7 3D surface points | 10–15 2D joint landmarks on canvas |
-| Generated Output | 3D Armature + Skin Weights | 2D Bone Hierarchy + Layer-Aware Skin Weights |
-| Motion Library | 3D Motion Capture Clips | Reusable 2D Keyframe Motion Templates |
-| Retargeting | 3D Skeletal Retargeting | Proportional Bone Length Retargeting |
+| Rigid cutout | Rigid parts, props, joint-separated artwork | Layer, pivot, optional bone/parent, transform |
+| Deform mesh | Hair, fabric, soft bodies, flexible faces | Valid mesh, bind pose, inverse bind, at most 4 influences |
+| Unbound | Hand-drawn cels or static cards | Artwork/exposure, transform, alpha |
 
-## 2. Landmark Detection & Calibration
+One asset may mix binding types; rigid layers do not need dense meshes or weights.
 
-### 2.1 Standard Humanoid Landmarks
+## 2. Rig workspace and direct editing
 
-```text
-Mandatory Primary Landmarks (10 Joint Centers):
+Layout includes a central asset canvas, layer/bone tree, step strip
+Artwork → Mesh → Bones → Bind → Test Pose, and a selection-aware inspector.
+Clearly distinguish Edit Rest Pose from Test Pose to prevent accidental rest edits.
 
-         ①  head_top         Cranial apex
-         ②  neck             Cervical joint (head base)
-    ③────┼────④              left_shoulder / right_shoulder
-    │    │    │
-    ⑤    │    ⑥              left_elbow / right_elbow
-    │    │    │
-    ⑦    ⑧    ⑨              left_wrist / right_wrist / hip_center
-         │
-    ⑩────┼────⑪              left_hip / right_hip
-    │         │
-    ⑫         ⑬              left_knee / right_knee
-    │         │
-    ⑭         ⑮              left_ankle / right_ankle
+- Artwork: view/layer selection, pivot, alpha/mask overlay, isolate/solo, overlap.
+- Mesh: vertex/edge/triangle selection, contour/hole repair, density/refinement,
+  quality overlay per [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md).
+- Bones: click chains, drag head/tail, reparent, rename, mapped mirror,
+  joint limits, numeric lengths. The tree displays parent/child relationships.
+- Bind: rigid/deform per layer, eligible bones, auto weights, heatmap, brush.
+- Test Pose: FK, supported IK handles/pins, reset, pose presets, rest/posed comparison.
+  Test poses are session evaluation; key creation is explicit within a clip.
+- Each drag/brush commits one transaction at completion. Selection/overlays do not revise.
+- Dependency-blocked tools explain repairable prerequisites instead of unexplained disabling.
 
-Optional Articulation Landmarks:
-  - left_hand, right_hand     Carpal centers
-  - left_foot, right_foot     Tarsal centers
-  - spine_mid                 Mid-torso articulation point
-  - left_eye, right_eye       Ocular blendshape centers
-  - mouth                     Phoneme articulation center
-```
+## 3. Landmarks and templates
 
-### 2.2 Calibration Methods
+Landmark sources are explicit: manual placement, AI-client vision proposals,
+or a selected heuristic/CV provider. Alpha heuristics do not guarantee anatomy;
+low-confidence results need correction, without assuming AI is more accurate.
 
-- **Editor UI**: Animator clicks landmark handles in Setup Mode. Viewport displays real-time skeletal overlays.
-- **AI Agent (MCP)**: Agent applies vision analysis to artwork pixel bounds, estimates joint centers,
-  and dispatches `rig.set_landmarks` with exact coordinates.
+Templates define required/optional landmarks and semantic bone mappings.
+There is no universal landmark count across humanoid/quadruped templates.
+Do not interchange `chin` and `head_top`: they are different points; missing
+points produce diagnostics instead of silent joint substitution.
 
-### 2.3 Skeleton Template Taxonomy
+- Humanoid first; quadruped, winged, fish, and custom chains follow staged fixtures.
+- T-pose has shoulders/elbows/wrists approximately horizontal; A-pose lowers arms.
+  Template illustrations and coordinates must agree, without fixed demo coordinates.
+- Landmarks belong to a source canvas/view and convert explicitly to asset-local
+  coordinates, including dimensions, crop offsets, pivots, and Y-axis direction.
+- Views preserve semantic mapping, not identical joint pixel positions.
+- Templates generate proposals previewed before commit. Proportions/landmarks are
+  editable; IDs remain stable within proposals/retries, not recreated per preview.
 
-| Skeleton Type | Min Landmarks | Typical Bone Count | Use Case |
-| --- | --- | --- | --- |
-| `humanoid` | 10 | 15–20 | Standard human characters |
-| `humanoid-detailed` | 15+ | 25–35 | Articulated hands, facial rigs |
-| `chibi` | 10 | 14–18 | Large-headed stylized characters |
-| `quadruped` | 12 | 18–24 | Four-legged animals |
-| `avian` | 10 | 14–18 | Birds, winged creatures |
+## 4. Hierarchy and bind pose
 
-### 2.4 Rig-Ready Image Templates
+Pre-commit validation rejects cycles, missing parents, duplicate bone IDs, invalid
+lengths, ambiguous roots, non-finite transforms, and singular bind matrices.
+Missing parents must not silently promote children into new roots.
 
-Instead of generating unstructured character poses, users and AI agents select a **Rig-Ready Template**
-prior to image generation. The template enforces strict proportions and neutral T-pose or A-pose alignment,
-enabling instantaneous auto-rigging with zero to minimal calibration.
+Rest pose is authoring state; bind pose defines inverse bind matrices.
+Skinning uses global bone transforms within asset space, then applies instance/
+world transforms, avoiding double application of world transforms.
 
-#### Rig-Ready Template Schema
+Rest-pose, hierarchy, pivot, and topology edits report impacts on bindings, morphs,
+and clips. Rebind/retarget includes preview and atomic undo.
+Display-name edits preserve stable-ID tracks; bone deletion reports affected tracks.
 
-```jsonc
-{
-  "templateId": "humanoid-front-tpose",
-  "name": "Humanoid — Front View — T-Pose",
-  "skeletonType": "humanoid",
-  "view": "front",
-  "pose": {
-    "name": "t-pose",
-    "description": "Standing straight, arms extended horizontally, legs shoulder-width",
-    "promptHint": "standing straight, arms extended horizontally to sides, T-pose, legs shoulder-width apart, facing camera directly"
-  },
-  "proportions": {
-    "headTopY": 5,          // 5% from canvas top
-    "neckY": 18,            // 18%
-    "shoulderY": 22,        // 22%
-    "shoulderWidth": 35,    // 35% canvas width
-    "elbowY": 42,           // 42%
-    "wristY": 58,           // 58%
-    "hipY": 50,             // 50%
-    "hipWidth": 18,         // 18% canvas width
-    "kneeY": 72,            // 72%
-    "ankleY": 92            // 92%
-  },
-  "estimatedLandmarks": {
-    "head_top":        { "x": 50, "y": 5 },
-    "neck":            { "x": 50, "y": 18 },
-    "left_shoulder":   { "x": 32, "y": 22 },
-    "right_shoulder":  { "x": 68, "y": 22 },
-    "left_elbow":      { "x": 18, "y": 42 },
-    "right_elbow":     { "x": 82, "y": 42 },
-    "left_wrist":      { "x": 8,  "y": 58 },
-    "right_wrist":     { "x": 92, "y": 58 },
-    "hip_center":      { "x": 50, "y": 50 },
-    "left_hip":        { "x": 41, "y": 52 },
-    "right_hip":       { "x": 59, "y": 52 },
-    "left_knee":       { "x": 40, "y": 72 },
-    "right_knee":      { "x": 60, "y": 72 },
-    "left_ankle":      { "x": 39, "y": 92 },
-    "right_ankle":     { "x": 61, "y": 92 }
-  },
-  "basePrompt": "full body character, front view, T-pose, arms extended horizontally, flat lighting, transparent background, centered"
-}
-```
+## 5. Controlled automatic weights
 
-When dragging handles in the UI, bone lengths, orientations, and weights update reactively without
-restarting the pipeline.
+The initial algorithm is proximity/envelope weighting with layer constraints,
+not heat diffusion.
 
-## 3. Auto-Skeleton Synthesis
+1. Derive eligible bones from layer/region semantics and user/template mappings.
+2. Measure distance to bone segments in the same asset/rest coordinate space.
+3. Produce finite, nonnegative scores with relative-size falloff and radius.
+4. Retain locked influences; select top 4 with stable bone-ID tie-breaking.
+5. Normalize unlocked remainder after pruning so the final sum is 1.
+6. Validate sum error at most 0.001, no more than 4 influences, existing bones.
 
-From confirmed landmarks, the engine synthesizes an acyclic bone tree:
+If locks exceed budget/sum or no valid candidate exists, report a diagnostic for
+bone/region selection; do not generate NaNs or assign every bone equally.
+Vertex-on-segment cases use a defined epsilon policy rather than division by zero.
 
-```text
-Humanoid Bone Hierarchy Mapping:
-  Landmark Segment           → Bone Name          Parent Bone
-  ───────────────────────────────────────────────────────────
-  hip_center → neck          → spine              (root)
-  neck → head_top            → head               spine
-  neck → left_shoulder       → left_clavicle      spine
-  left_shoulder → left_elbow → left_upper_arm     left_clavicle
-  left_elbow → left_wrist    → left_forearm       left_upper_arm
-  neck → right_shoulder      → right_clavicle     spine
-  right_shoulder → right_elbow → right_upper_arm  right_clavicle
-  right_elbow → right_wrist  → right_forearm      right_upper_arm
-  hip_center → left_hip      → left_hip_bone      spine
-  left_hip → left_knee       → left_thigh         left_hip_bone
-  left_knee → left_ankle     → left_shin          left_thigh
-  hip_center → right_hip     → right_hip_bone     spine
-  right_hip → right_knee     → right_thigh        right_hip_bone
-  right_knee → right_ankle   → right_shin         right_thigh
-```
+Do not use absolute demo-character thresholds, X signs for anatomical sides, or
+bone-name substrings as universal anatomy rules. Mirroring, cropping, scaling,
+and animals follow data/mapping-based principles.
 
-Bone origin equates to start landmark. Bone vector establishes resting length and rotational angle.
-Topological sorting validates acyclic graphs.
+Identical input, template revision, and parameters produce deterministic results.
+Cache adjacency/candidates by topology; larger jobs offer progress/cancel and
+commit only after validation without blocking the UI.
 
-## 4. Layer-Aware Proximity Skin Weighting
+## 6. Brush and binding repair
 
-```mermaid
-flowchart TD
-  B["Bone Hierarchy"] --> D["Compute Vertex-to-Bone Distances"]
-  M["Mesh Vertices"] --> D
-  A["Layer Alpha Masks"] --> L["Layer Boundary Affinity Filter"]
-  D --> N["Normalize Weights (Sum = 1.0)"]
-  L --> N
-  N --> C["Clamp to Top 4 Influences"]
-  C --> W["Final Skinning Weight Buffers"]
-```
+Weight brushes support add, subtract, replace, smooth, radius, strength, falloff,
+bone locks, selected-vertices-only, and numeric influence tables.
+Rigid binding selects bone/parent directly without weight painting.
 
-Standard Euclidean distance weighting fails in 2D because foreground arms physically overlap background torsos.
-Parallax Studio solves this via **Layer-Aware Weighting**:
-1. **Geometric Proximity**: Evaluates perpendicular distance from vertex to bone segments.
-2. **Layer Affinity Filtering**: Vertices residing in the `left-arm` layer prioritize `left_upper_arm` and
-   `left_forearm` bones, suppressing influence from overlapping `spine` or `torso` bones.
-3. **Seam Overlap Blending**: At designated joint overlap zones, weights smoothly blend between parent and child bones.
-4. **Normalization**: Constrained to top 4 influences, normalized strictly to $\sum w_i = 1.0 \pm 0.001$.
+Smoothing follows mesh adjacency and boundary/region locks. Do not mix weights
+across islands or opposite sides merely because they are close in the image.
+Strokes use shared top-4/normalize/validate logic for preview and commit.
+Cancel restores previous weights; undo is per stroke, not per sample.
 
-## 5. 2D Mesh Topology Standards
+## 7. Separate asset clips
 
-Mirroring 3D sub-division modeling where edge loops preserve limb volume during bending,
-2D planar animation meshes require structured edge flow.
+The `animate` workspace provides a clip library, isolated canvas, dope sheet,
+and graph editor. Author named clips, trim/loop work ranges, key transforms/bones/
+warps/morphs, copy/paste keys, easing, stepped exposures, and explicit auto-key.
 
-### 5.1 3D vs. 2D Mesh Topology Equivalents
+`DrawingDocument`, `DrawingLayer`, `Cel`, and `Exposure` supply hand-drawn content.
+The X-sheet edits holds/blanks/copies/links in the same clip; painting opens the
+source cel. One clip may combine cel blinking, bone-driven arms, and mesh clothing.
+Channel precedence and blending need explicit contracts; do not silently blend
+two exposures or incompatible clips.
 
-| 3D Principle | 2D Planar Equivalent |
+Animation templates are starting points rather than finished results.
+Retarget through stable semantic mappings, rest-pose offsets, and bone-length
+ratios; report missing bones, axis/scale mismatches, and root-motion policy.
+Humanoid templates do not automatically apply to quadrupeds. Preview foot sliding,
+contact, overlaps, and joint ranges before saving a new clip.
+
+Clip references and instance overrides are separate. Instance speed, trim,
+offset/loop edits in compositions do not modify the source; source updates carry
+revisions and report affected instances.
+
+## 8. Staged acceptance
+
+| Stage | Criteria |
 | --- | --- |
-| Concentric edge loops around bending joints | Parallel vertex rings across joint pivot on texture |
-| Higher quad density in deformation zones | Denser triangle tessellation at articulated joints |
-| Low poly in rigid bone shafts | Coarse triangle tessellation along bone midsections |
-| Quad loops around ocular/oral orifices | Closed concentric vertex loops around eyes and mouth |
-| UV seams along hidden edges | Planar 1-to-1 texture UV mapping |
+| Rig foundation | Rigid character and prop; correct pivots, hierarchy editing, rest/test distinction, undo/reopen |
+| Mesh binding | Donut, islands, bent arms; no cross-region pull; valid sums/indices/binds |
+| Weight repair | Lock/add/smooth/numeric edits match UI/MCP; scale/mirror fixtures are demo-independent |
+| Asset animation | 3 idle/walk/blink clips; graph/dope/X-sheet; two independently playing instances |
+| Template expansion | Quadruped/custom announced only after fixtures, retargeting, and manual correction acceptance |
 
-### 5.2 Articulation Topology Patterns
+Do not promise “20-second auto-rig” or “1–3-second weights” without benchmarks.
+Measure 1/8/32 layers, 1k/10k/50k vertices, 16/64 bones; record CPU/GPU, data,
+p50/p95, peak memory, and cancellation latency. These are fixtures, not hard limits.
+Latency pass/fail is settled after the spike; correctness gates apply immediately.
 
-#### Facial Topology (`head`)
+## 9. Current state and risks
 
-- **Eye Loops**: $6–8$ closed boundary vertices enclosing each ocular aperture to facilitate clean blinking without warping brows.
-- **Mouth Loops**: $8–10$ boundary vertices surrounding the lip contour to support phoneme morphs.
-- **Cervical Loop**: Transverse edge loop spanning the neck base for head rotation.
-- **Cranial Apex**: Coarse tessellation across forehead and hair masses.
+Inspection dated 12/09/2026: auto-skeleton uses humanoid mappings; auto-weights
+contains absolute character-specific zones and bone-name checks.
+Replace them with data-driven eligibility/mappings before calling the rig general.
+This planning update does not change source.
 
-#### Torso Topology (`torso`)
+LBS may shrink/distort sharply bent joints; repair topology, overlap, and weights
+first, then add corrective morphs when needed; no claim of eliminating every artifact.
+Missing occluded artwork requires painting, not simply more bones.
 
-- Transverse shoulder edge loop aligned with the clavicle-to-arm pivot.
-- Transverse lumbar edge loop enabling spine flexion and lateral bending.
-- Pelvic boundary edge loop separating legs from hips.
+## 10. Links
 
-#### Limb Topology (`arm` & `leg`)
-
-- **Double Edge Loop Invariant**: Articulated hinge joints (elbows and knees) mandate **$\ge 2$ concentric edge loops**.
-  Single-edge joints collapse volume during acute bends ($> 45^\circ$).
-- Coarse midsection tessellation along the humerus, radius, femur, and tibia.
-- Overlap margins at limb terminals: $\ge 10\%$ of total bone length overlapping adjacent layers.
-
-### 5.3 Layer-to-Bone Topology Mapping
-
-| Layer ID | Mesh Density | Required Edge Loops | Primary Bone Target |
-| --- | --- | --- | --- |
-| `head` | High (expressions) | Neck transverse loop, ocular/oral rings | `head` |
-| `torso` | Medium | Clavicle seam, lumbar waist, pelvic seam | `spine` |
-| `pelvis` | Low–Medium | Upper hip waist, lower acetabular seams | `spine` (root) |
-| `upper_arm` | Medium | Clavicle overlap, dual elbow concentric loops | `left_upper_arm` / `right_upper_arm` |
-| `forearm` | Medium | Dual elbow concentric loops, carpal wrist seam | `left_forearm` / `right_forearm` |
-| `hand` | Low | Carpal wrist seam | `left_hand` / `right_hand` |
-| `thigh` | Medium | Pelvic overlap, dual patellar knee loops | `left_thigh` / `right_thigh` |
-| `shin` | Medium | Dual patellar knee loops, ankle seam | `left_shin` / `right_shin` |
-| `foot` | Low | Ankle seam | `left_foot` / `right_foot` |
-
-### 5.4 Pre-Rigging Topology Checklist
-
-1. $\ge 1$ transverse loop at shoulders, hips, and neck.
-2. $\ge 2$ concentric loops across elbows and knees.
-3. $\ge 10\%$ bone length artwork overlap at articulated seams.
-4. $6–8$ closed vertex rings around eye contours (if facial morphs enabled).
-5. $8–10$ closed vertex rings around mouth contours (if lip-sync enabled).
-6. Zero degenerate triangles ($\text{area} > 0$).
-7. All vertex weights normalized to $1.0 \pm 0.001$.
-
-## 6. Motion Templates & Retargeting
-
-### 6.1 Core Reusable Templates
-
-| Category | Template ID | Description | Required Bones |
-| --- | --- | --- | --- |
-| Idle | `idle-breathe` | Subtle vertical chest oscillation | `spine`, `head` |
-| Idle | `idle-look-around` | Subtle head yaw and eye sweep | `head`, `spine` |
-| Locomotion | `walk-cycle` | Loopable standard humanoid walk cycle | All limbs, `spine` |
-| Locomotion | `run-cycle` | High-cadence athletic run loop | All limbs, `spine` |
-| Gesture | `wave-hand` | Single-arm conversational wave | `left_upper_arm`, `left_forearm` |
-| Gesture | `nod-yes` | Vertical cranial affirmation | `head`, `neck` |
-| Action | `jump-in-place` | Crouch, impulse, air hold, landing squash | All bones |
-
-### 6.2 Proportional Retargeting Engine
-
-Animation templates serialize local rotations (degrees) and relative translational displacements.
-When applied to a target skeleton:
-1. Bone IDs in the template map to identical bone names in the character rig.
-2. Rotations apply directly regardless of character scale.
-3. Translational offsets scale proportionally to target bone lengths:
-   $$\Delta x_{\text{target}} = \Delta x_{\text{template}} \times \left(\frac{L_{\text{target}}}{L_{\text{template}}}\right)$$
-4. Missing bones retain neutral rest poses without throwing exceptions.
-5. Extraneous bones on the character remain unmutated in their rest poses.
-
-## 7. MCP Tools for Auto-Rigging
-
-| Tool | Action | Description |
-| --- | --- | --- |
-| `rig.detect_landmarks` | read | Heuristic boundary analysis proposing joint coordinates |
-| `rig.set_landmarks` | write | Sets joint landmark coordinates |
-| `rig.get_landmarks` | read | Queries active calibrated landmarks |
-| `rig.auto_skeleton` | write | Synthesizes bone tree from landmarks + skeleton type |
-| `rig.auto_weights` | write | Evaluates proximity weights with layer masking |
-| `rig.preview_skeleton` | read | Renders skeleton overlay atop character artwork |
-| `animation.list_templates` | read | Queries available motion templates |
-| `animation.apply_template` | write | Retargets motion template onto character rig |
-| `animation.adjust_template` | write | Modifies keyframes of applied motion clip |
-
-## 8. Documentation References
-
-- [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md) — Layer decomposition and AI asset handoff
-- [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md) — Linear blend skinning and transformation order
-- [MCP_TOOLS.md](MCP_TOOLS.md) — Tool specifications and execution schemas
-- [PROJECT_FORMAT.md](PROJECT_FORMAT.md) — `rig.json` and `landmarks.json` schema definitions
-- [PLAN.md](PLAN.md) section 2 — Multi-view and rigging Master Plan
+- [IMAGE_WORKFLOW.md](IMAGE_WORKFLOW.md): drawing, layers, cels, meshes.
+- [DEFORMATION_PIPELINE.md](DEFORMATION_PIPELINE.md): sampling and deformation order.
+- [UI_SPECIFICATION.md](UI_SPECIFICATION.md): workspaces and interaction.
+- [PROJECT_FORMAT.md](PROJECT_FORMAT.md): ownership, revisions, migration.
+- [MCP_TOOLS.md](MCP_TOOLS.md): UI/agent communication and capabilities.

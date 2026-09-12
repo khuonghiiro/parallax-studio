@@ -1,257 +1,166 @@
-# Parallax Studio — Kế hoạch 2D → 2.5D
+# Parallax Studio — Kế hoạch studio 2D và làm phim 2.5D
 
-Ngày cập nhật: 11/09/2026. Trạng thái: đề xuất để người dùng duyệt.
+Cập nhật 12/09/2026. Trạng thái: đề xuất vNext để người dùng xem trước khi triển khai.
+Lượt này sửa tài liệu; không xác nhận app đã có hoặc đã đạt các chức năng bên dưới.
 
-Kế hoạch này thay thế phương án Blender/Python trước đó. Trong lượt hiện tại chỉ
-cập nhật tài liệu, rule, skill và công cụ kiểm tra quy tắc; chưa làm tiếp tính năng app.
+## 1. Định hướng và baseline
 
-## 1. Định hướng
+Mục tiêu: tự vẽ hoặc nhập ảnh nhiều layer → tạo clip vẽ tay/rig → lắp cảnh nhiều
+lớp có chiều sâu → camera/light → dựng nhiều shot, audio/subtitle → xuất phim.
+Không cần Blender, Godot hay model 3D. Mesh phẳng, camera và light trong không gian
+3D phục vụ ảnh 2D; không biến sản phẩm thành phần mềm dựng model.
 
-Tạo ứng dụng chuyên xử lý ảnh 2D, rig xương, biến dạng khuôn mặt/cơ thể, quản lý
-nhiều góc nhìn và dựng phim 2.5D. Không phụ thuộc Blender hoặc Godot. Model 3D/GLB
-không nằm trong phạm vi bản đầu.
+Code hiện có React editor, packages/contracts/core/application/runtime, service,
+MCP và exporter. Có module không đồng nghĩa workflow đã hoàn tất.
+Rà source ngày 12/09 cho thấy:
 
-Người dùng làm việc với ảnh, layer, xương, pose và clip. Engine dùng mesh phẳng,
-camera và tọa độ có chiều sâu để tạo parallax và bóng. Việc tính toán trong không
-gian 3D không yêu cầu người dùng dựng hay nhập model 3D hoàn chỉnh.
+| Khu vực | Hiện trạng cần xử lý |
+| --- | --- |
+| UI | Setup/Animate; clip cố định idle/walk/ready; ngữ cảnh asset và shot trộn nhau |
+| Dựng phim | Có scene composer nhưng chưa chứng minh luồng lắp lớp, camera path, sequence đầy đủ |
+| Mesh/rig | Contour chưa giữ holes; UV/weights có giả định cần sửa và test trên nhiều dạng asset |
+| MCP | Relay remote rồi vẫn mutate local; timeout fallback có thể chia state |
+| Export | Luồng App ghi canvas 5 giây/24 FPS; chưa chứng minh xuất sequence đúng frame |
 
-Ưu tiên một renderer cho cả preview/export, một bộ nghiệp vụ cho UI/MCP, cùng
-định dạng project có thể mở lại và sửa. Không tự xây lại các phần thư viện đã làm tốt.
+Không gọi code hiện tại là bản nháp chưa từng build; cần đo lại build/test và UI
+thực tế khi triển khai. Bảng trên là kết quả đọc source, không phải nghiệm thu chạy app.
 
-Yêu cầu bổ sung đã nhận: dùng công cụ tạo ảnh sẵn có của Codex/Antigravity rồi
-nhập kết quả qua MCP; xuất phim 60/120 FPS ở 2K/4K. GPU mục tiêu người dùng cung cấp
-là NVIDIA RTX 3060 12 GB VRAM. Chi tiết được tách thành [luồng tạo ảnh](IMAGE_WORKFLOW.md)
-và [profile render](RENDER_PROFILES.md).
+## 2. Luồng sáng tác và ranh giới dữ liệu
 
-## 2. Cơ chế nhiều góc nhìn từ ảnh
+Năm workspace trong cùng project:
 
-```mermaid
-flowchart LR
-  A[Ảnh nguồn hoặc bộ góc nhìn] --> B[Layer và mask]
-  B --> C[Mesh 2D và UV]
-  C --> D[Xương và trọng số]
-  D --> E[Pose, biểu cảm, chuyển góc]
-  E --> F[Clip tái sử dụng]
-  F --> G[Cảnh có chiều sâu, camera, đèn]
-  G --> H[Timeline nhiều shot]
-  H --> I[Video]
-```
-
-| Cơ chế | Công dụng | Dữ liệu cần có |
+| Workspace | Công việc | Kết quả |
 | --- | --- | --- |
-| Bone và skinning | Uốn tay/chân, cổ, đuôi | Xương, mesh và trọng số |
-| Warp và morph pose | Quay mặt nhẹ, chớp mắt, miệng, squash/stretch | Lưới điều khiển và pose mẫu |
-| View set | Góc trước, nghiêng, bên, sau nếu được cung cấp | Ảnh/layer và binding tương ứng từng góc |
+| draw | Brush, layer assembly, cels, onion skin, exposure | DrawingDocument |
+| rig | Mesh thủ công/tự động, skeleton, weights, test pose | AssetDefinition có binding hợp lệ |
+| animate | Clip riêng của asset: keys, curves, cels, loop | AnimationClip tái sử dụng |
+| compose | AssetInstance, planes theo Z, clip placements, camera/light | Composition và Shot |
+| edit | Cắt/ghép shots, dialogue/music/SFX, subtitle, render queue | Sequence và video |
 
-Live2D mô tả mesh deformation và deformer cho quay mặt/cử động; Spine mô tả
-skinning theo trọng số. Đây là nguồn tham khảo cơ chế, không phải dependency
-bắt buộc. [Live2D deformers][live2d], [Spine weights][spine-weights].
-Cơ chế auto-rig (landmarks, auto-skeleton, auto-weights) và mesh topology
-được quy định chi tiết tại [AUTO_RIG.md](AUTO_RIG.md).
+DrawingDocument chứa DrawingLayer, Cel và Exposure. AssetDefinition là bản gốc;
+AssetInstance là một lần đặt vào Composition. AnimationClip ở thời gian local
+của asset; ClipPlacement ánh xạ clip vào instance. Shot chọn composition, camera và
+range; Sequence lắp shot placements theo thời gian phim.
+Schema và timebase chính xác do [Project Format](PROJECT_FORMAT.md) sở hữu.
 
-### Bộ góc nhìn
+Frame-by-frame không cần xương. Rigid cutout, deformable mesh và cel substitutions
+có thể kết hợp trong một asset. Nhiều góc nhìn cần ảnh/layer và binding tương ứng;
+không suy ra góc khuất chính xác từ một ảnh. Chỉ morph giữa topology tương thích,
+còn lại chuyển view rõ ràng. Normal map tạo phản ứng ánh sáng, không sinh thể tích.
 
-- Khởi đầu với chính diện và hai góc nghiêng; thêm hai góc bên khi asset cần.
-- Mỗi góc lưu layer, pivot, draw order và bindings riêng; tên xương cùng ý nghĩa.
-- Đầu/cơ thể có thể chuyển góc độc lập nếu bộ asset hỗ trợ.
-- Chỉ nội suy mesh khi topology và correspondence tương thích.
-- Nếu topology khác, đổi view tại mốc phù hợp hoặc blend được kiểm chứng;
-  không trộn vertex không tương ứng.
-- Góc được clip/tham số điều khiển; có thể chọn theo hướng tương đối với camera,
-  có ngưỡng ổn định để tránh nhấp nháy ở ranh giới view.
-- Thiếu góc sau thì báo thiếu view, không giả lập rằng ảnh trước đủ để quay 360 độ.
+## 3. Nền tảng và tái sử dụng thư viện
 
-Một ảnh không cung cấp vùng bị che hoặc góc sau. AI có thể vẽ thêm, nhưng phải
-kiểm tra độ nhất quán trang phục, tỷ lệ và chi tiết. Sinh bộ góc là bước riêng
-với dựng mesh và rig; người dùng có thể chỉnh từng kết quả.
+Giữ kiến trúc hiện có; không thay framework để sửa UI.
 
-### Vật liệu 2D
+| Thành phần | Hướng triển khai |
+| --- | --- |
+| UI | React + TypeScript; hợp nhất component/tokens, Lucide và SVG chuyên dụng |
+| Runtime | Three.js/WebGL2; cùng evaluator và renderer cho preview/export |
+| Geometry | Tái sử dụng Earcut cho triangulation; tự sở hữu contour, constraints, UV và validation |
+| Drawing | Raster-first, brush/stroke/tile cache; không thêm renderer scene thứ hai |
+| Import | PNG/layer sequence trước; PSD qua adapter subset được kiểm tra |
+| Contracts/MCP | Zod/schema chung, SDK MCP TypeScript; service là nơi quản lý project |
+| Desktop | Tauri/Rust cho shell, file/process lifecycle và đóng gói Windows/Linux |
+| Export | Frame sampling xác định + FFmpeg; probe NVENC và fallback rõ ràng |
 
-Mỗi layer có ảnh màu, alpha/mask và tùy chọn normal map, roughness, tint. Mặc định
-có phong cách màu phẳng; chế độ ánh sáng bổ sung cảm giác nổi khối. Normal map
-chỉ thay đổi phản ứng ánh sáng, không sinh hình khối/góc khuất. Depth map nâng cao
-là tính năng sau, không thay thế bộ góc nhìn.
+Kiểm tra dependency/version/license thực tế trước khi thêm thư viện. Đây là hướng
+dùng lại, không khẳng định tất cả adapter đã cài. Không đưa runtime thương mại có
+điều kiện vào lõi chỉ vì editor của họ có chức năng tương tự.
+TypeScript giữ logic chung; chỉ chuyển hot path sang Rust/WASM sau số đo.
+Không thêm model local, Python service hay API key tạo ảnh riêng vào luồng mặc định.
 
-## 3. Thư viện và ngôn ngữ đề xuất
+## 4. UI, camera và chất lượng hình
 
-| Thành phần | Lựa chọn | Phạm vi |
+[UI Specification](UI_SPECIFICATION.md) thay thiết kế hai mode bằng các workspace
+có timeline riêng: exposure, asset keys/curves, composition clips/camera và sequence.
+Compose có Stage Perspective/Top/Side để sắp layer cùng Final Camera View để xem
+khung hình. Editor navigation camera khác camera của phim; kéo viewer không tạo key.
+
+Perspective + planes theo Z tạo parallax; orthographic giữ hành vi phẳng.
+Draw order trong plane khác depth. Instance có transform, time offset và clip
+riêng, không di chuyển source asset. Camera hỗ trợ path/ease/pan/dolly/zoom với scope rõ.
+Light/shadow theo alpha và hình đã deform; sàn/tường nhận bóng là plane có sẵn.
+Phong cách unlit, bóng silhouette và bóng mỹ thuật có tên rõ. Card 2D có giới hạn
+khi nhìn cạnh/sau; không cam kết bóng thể tích như model đầy đủ.
+
+Mesh phải giữ holes/islands, UV theo ảnh nguồn, weights hợp lệ và khớp không rách.
+Cần preview/apply, sửa đỉnh/xương/weight thủ công và test extreme poses;
+không dùng số đỉnh hay cam kết auto-rig 30 giây thay cho kiểm chứng.
+Chi tiết ở [Auto Rig](AUTO_RIG.md), [Image Workflow](IMAGE_WORKFLOW.md) và
+[Deformation Pipeline](DEFORMATION_PIPELINE.md).
+
+## 5. AI/MCP và độ tin cậy
+
+UI/MCP cùng Application Service và project revision. Durable commands, session
+selection/playback và read/job APIs tách riêng. Một gesture commit một lần;
+transaction phải atomic, retry có receipt/idempotency và conflict có đường phục hồi.
+Không mutate local sau remote success hoặc timeout không rõ kết quả.
+
+AI đọc khả năng và context → lập shot plan → tạo/import ảnh thật bằng công cụ của
+client → lắp asset/clip/shot → render preview có artifact → review/sửa → export job.
+MCP không mặc nhiên gọi được tool ảnh nội bộ của Codex/Antigravity. UI hiển thị
+handoff/waiting nếu chưa có client hoặc file. Không coi metadata là ảnh preview.
+Connection Center hiển thị service/session/project/capabilities và lỗi xử lý được.
+[Command Bus](COMMAND_BUS.md), [MCP Tools](MCP_TOOLS.md) sở hữu các contract này.
+
+## 6. Preview, audio và export
+
+Cel authored FPS, preview FPS và output FPS độc lập. Camera/bone được sample ở
+thời điểm output; cel hold vẫn step có chủ ý. Thời gian dùng ticks/rational rates,
+range nửa mở và ánh xạ sequence → shot → composition → clip theo Project Format.
+Dùng chung evaluator/deformation pipeline; không nhân đôi frame 60 để gọi là 120.
+
+Bản làm phim đầu tiên cần cuts, audio tracks với waveform/gain/fade/A-V sync và
+subtitle cơ bản. Không để audio thành phần chưa xác định sau khi tuyên bố phim hoàn chỉnh.
+Render queue chọn Sequence/Shot/Range và snapshot revision; lấy đủ frame offline,
+stream buffer giới hạn sang FFmpeg, hiển thị lỗi/cancel/file thật. Headless để sau.
+[Render Profiles](RENDER_PROFILES.md) giữ đầu ra Full HD/2K/QHD/4K và 24/30/60/120 FPS.
+
+RTX 3060 12 GB là GPU mục tiêu, không phải bằng chứng mọi cảnh đạt preview 4K/120.
+Preview mục tiêu 60 FPS ở resolution thích ứng; 120 FPS tùy benchmark.
+Export 4K/120 có thể chậm hơn thời gian thực mà vẫn đúng đầu ra.
+
+## 7. Mốc triển khai và điều kiện chuyển mốc
+
+| Mốc | Phạm vi | Điều kiện đạt trước khi mở rộng |
 | --- | --- | --- |
-| UI | React + TypeScript + Lucide Icons | Asset editor, rig editor, timeline và inspector ([chi tiết UI](UI_SPECIFICATION.md)) |
-| Render | Three.js, WebGL2 trước | Mesh phẳng có xương, camera, material và bóng |
-| Tam giác hóa | Earcut | Tam giác hóa contour đã kiểm tra |
-| PSD | ag-psd, tùy chọn | Layer trong phạm vi thư viện hỗ trợ; PNG chia lớp được ưu tiên |
-| Schema | Zod + JSON Schema được sinh | Một nguồn contract cho UI/service/MCP |
-| MCP | SDK TypeScript chính thức | Adapter cho Codex và Antigravity |
-| Local service | Node.js + TypeScript | Project state, command bus, tệp và job |
-| Desktop | Tauri + Rust | Windows/Linux, lifecycle các tiến trình |
-| Xuất phim | Renderer dùng chung + FFmpeg native | Frame đúng thời gian, video và âm thanh |
-| Nguồn sinh ảnh | Công cụ tạo ảnh tích hợp trong Codex/Antigravity | AI tạo ảnh rồi chuyển kết quả vào app qua MCP |
+| P0. Contract và baseline | Inventory UI thực, thống nhất entity/timebase/migration, service authority, save/recovery, mockup tương tác 5 workspace | Shared contracts chốt; không split state/false success; project cũ có đường mở/migrate |
+| P1. Lát cắt làm phim | Draw raster tối thiểu → clip cel/rigid → Compose nhiều planes/camera → Edit 3 cuts + audio/subtitle → export ngắn | User hoàn tất và mở lại phim 15 giây từ UI; MCP điều khiển cùng dữ liệu |
+| P2. Studio asset | Brush/selection/mask/exposure hoàn chỉnh theo spec; mesh manual/auto/holes/UV; skeleton/weights/test poses; clip keys/curves | UX-01/02/03; fixture deform, undo stroke và replace-source/rebind đạt |
+| P3. Dàn cảnh và dựng | Instance reuse, clip timing, path camera, light/shadow, shot trim/split/ripple, audio/subtitle chỉnh sửa đầy đủ | UX-04/05/06; không nhầm source/instance, cut và A/V sync đúng |
+| P4. AI đạo diễn và recovery | Kịch bản → assets → shots → preview thật → sửa → export; jobs, reconnect, conflict, import handoff | UX-07; AI/UI cùng revision, retry không duplicate, không báo hoàn thành giả |
+| P5. Chất lượng sản xuất | Render presets, cache/readback, DPI/keyboard/stylus, autosave, Windows/Linux packaging | UX-08/09/10; video và benchmark thực, queue/cancel/recovery đạt |
 
-Three.js có skinning và material hỗ trợ normal map. Earcut/ag-psd giảm phần xử lý
-phải tự viết. Editor rig, warp, view set và timeline vẫn cần xây dựng. Earcut chỉ
-xử lý triangulation; contour extraction, thêm đỉnh quanh khớp và topology cho
-biến dạng cần logic riêng. [Skinning][skinning], [material][material],
-[Earcut][earcut], [ag-psd][psd].
+P1 là workflow nhỏ xuyên suốt, không yêu cầu mọi brush/effect đạt mức cuối ngay.
+MCP và deterministic export bắt đầu ở P0/P1 rồi được mở rộng; không để đến P4/P5
+mới phát hiện editor và AI dùng hai bộ nghiệp vụ.
+Mỗi mốc gồm vertical slice, kiểm tra hành vi và demo project; không triển khai đồng
+loạt mọi panel rỗng rồi gọi là xong UI.
 
-TypeScript sở hữu logic chính để UI, MCP và renderer dùng chung trực tiếp. Rust
-không giữ một bản rig/timeline thứ hai. Chỉ chuyển hot path sang Rust/WASM nếu đo
-được lợi ích; duy trì một nguồn triển khai và bộ test tương thích. Không thêm
-model local, ComfyUI, Python service hoặc API key sinh ảnh riêng vào luồng mặc định.
+[Testing Strategy](TESTING_STRATEGY.md) sở hữu ma trận kiểm thử. Mỗi nghiệm thu cần
+project mở lại được, video/screenshot workflow, output decode/probe khi có render,
+cấu hình máy và số đo. Test riêng lẻ hoặc tên module không thay chứng cứ này.
 
-Các thư viện nền có thể dùng miễn phí: Three.js dùng MIT, Earcut dùng ISC. Chưa
-đưa Live2D/Spine runtime vào lõi vì có điều khoản riêng. [Three.js license][three-license],
-[Earcut][earcut], [Spine runtime license][spine-license].
+## 8. Quy tắc code và team AI
 
-Không ghép PixiJS và Three.js trong bản đầu: dùng một renderer để giảm chi phí
-đồng bộ pose, material, picking và shadow. WebGPU được đánh giá sau WebGL2.
+[Coding Rules](CODING_RULES.md), [Module Map](MODULE_MAP.md) và
+[AI Team Protocol](AI_TEAM_PROTOCOL.md) tiếp tục áp dụng: tối đa 800 dòng vật lý
+mỗi source file, không nén mã để lách, đặt tên rõ và chia theo trách nhiệm.
+Một nghiệp vụ có một chủ sở hữu; tìm nơi có sẵn trước khi tạo thêm helper/service.
 
-## 4. Camera và bóng cho 2.5D
+Lead chốt contract, giao một write owner mỗi file; chỉ song song hóa phạm vi
+độc lập. Nhóm UI, graphics, application/MCP, desktop/export và QA dùng cùng
+acceptance workflow. Dịch đồng thời docs_vi sang docs trong mỗi thay đổi yêu cầu.
+Không tạo implementation từ một yêu cầu chỉ duyệt/sửa plan.
 
-- Nhân vật/bối cảnh là các lớp có chiều sâu; camera orthographic hoặc perspective.
-- Mesh deform theo pose rồi tham gia shadow pass.
-- Bóng theo alpha ảnh, silhouette sau deform và hướng đèn; không thành hình chữ nhật.
-- Sàn/tường nhận bóng là plane đơn giản app cung cấp; không cần người dùng làm model 3D.
-- Bóng silhouette theo đèn và bóng mềm mỹ thuật là hai chế độ có tên rõ ràng.
-- Đổi view phải đổi shadow tương ứng, tránh tạo hai bóng ngoài ý muốn.
-- Card phẳng không có thể tích đầy đủ: bóng ở góc cạnh/góc sau có giới hạn.
-  Shadow proxy đơn giản có thể bổ sung sau khi đã kiểm chứng phong cách phim.
+## 9. Phạm vi hoãn và bước tiếp theo
 
-## 5. AI/MCP và dữ liệu chung
+Hoãn: full vector editor, brush engine ngang phần mềm vẽ chuyên dụng lâu năm,
+model 3D/GLB authoring, cloth/fluid, lip-sync tự động nâng cao, motion blur/DOF nâng cao,
+cloud collaboration/render và headless export. Tạo giọng nói không mặc định có
+provider; bản đầu nhận audio file. Không hứa tự rig mọi silhouette hoặc suy đủ góc từ một ảnh.
 
-```mermaid
-flowchart TD
-  A[Codex / Antigravity] --> B[MCP adapter]
-  U[Editor UI] --> C[Application service]
-  B --> C
-  C --> D[Command bus và project state]
-  D --> E[Core: asset, rig, view set, animation]
-  D --> F[Kho project và lịch sử]
-  D --> G[Renderer dùng chung]
-  G --> U
-  G --> H[Frame → FFmpeg → video]
-```
-
-Tool theo miền: đọc project/asset; nhập layer; tạo mesh; tạo/sửa rig; test pose;
-thêm view/biểu cảm; thêm clip/shot; đặt camera/light; render preview; xuất phim;
-đọc/hủy job. UI và MCP gọi cùng application service.
-
-AI thay đổi asset/scene qua dữ liệu, không sửa source code app mỗi lần làm phim.
-Command có schema, revision, ID và state đọc lại. Batch nguyên tử; retry không
-tạo asset/job lặp; undo/redo dùng cùng command bus.
-
-Luồng tạo asset mặc định:
-
-1. Agent đọc yêu cầu/style/reference và tạo brief chuẩn từ tool của app.
-2. Codex/Antigravity gọi công cụ sinh hoặc sửa ảnh đang có của chính client.
-3. Agent đưa ảnh thật vào app qua tool MCP nhập asset; app kiểm tra dữ liệu và lưu source.
-4. Chuẩn hóa layer/view, tạo mesh, rig, test pose và sửa qua cùng command bus.
-
-MCP server không tự gọi được công cụ nội bộ của mọi AI client. Agent điều phối
-hai nhóm công cụ trong một tác vụ; nếu thiếu công cụ tạo ảnh hoặc không chuyển
-được file thì báo đúng trạng thái. Luồng chạy từ yêu cầu trong Codex/Antigravity;
-nút tạo ảnh trong UI không được giả lập rằng đã khởi chạy một agent bên ngoài.
-Không cần người dùng cấu hình thêm model/API sinh ảnh trong app.
-[Chi tiết luồng, truyền file và nghiệm thu](IMAGE_WORKFLOW.md).
-
-Project lưu manifest có phiên bản, asset source, các view, rig, material và clips.
-Texture atlas/thumbnail là cache tạo lại được; scene instance tham chiếu asset ID.
-Chốt schema chi tiết ở mốc 0 để tránh khóa cứng định dạng trước thử nghiệm.
-[Chi tiết schema và cấu trúc project](PROJECT_FORMAT.md).
-[Kiến trúc command bus và undo/redo](COMMAND_BUS.md).
-[Catalog MCP tools](MCP_TOOLS.md).
-[Thiết kế giao diện và hệ thống icon](UI_SPECIFICATION.md).
-
-## 6. Preview và export
-
-- Cùng pose evaluator tại thời điểm `frameIndex / fps`.
-- FPS của timeline, preview và video xuất là ba thiết lập riêng. Export hỗ trợ
-  24/30/60/120 FPS, gồm 2K DCI, QHD 1440p, 4K UHD và 4K DCI.
-- Mỗi frame xuất được lấy mẫu tại thời gian đích; không chỉ đổi metadata hoặc
-  nhân đôi frame 60 FPS để gọi là render 120 FPS.
-- Thứ tự contract: chọn view → warp/morph ở rest space → bone skinning →
-  instance transform → camera/shadow/render; thứ tự này phải có test.
-  [Chi tiết pipeline biến dạng](DEFORMATION_PIPELINE.md).
-- Renderer gửi frame theo pipeline có bộ đệm giới hạn sang FFmpeg; hiển thị progress,
-  lỗi và hủy job. Mỗi job gắn với snapshot revision.
-- Ưu tiên H.264/HEVC qua NVENC khi driver và bản FFmpeg hỗ trợ. Probe encoder thực tế
-  và có fallback CPU rõ ràng; không tự hạ độ phân giải hoặc FPS khi encode chậm.
-- Bản đầu cần app đang mở để renderer nhận job. MCP trả `waiting_renderer` khi
-  chưa có renderer; không báo đang render hoặc đã xong sai thực tế.
-- Headless khi app đóng là mở rộng sau pipeline cơ bản.
-- Browser dùng cùng editor nhưng cần kiểm tra codec/tệp của môi trường; không hứa
-  web có đủ khả năng native nếu thiếu local service.
-
-4K/120 FPS là yêu cầu chất lượng đầu ra; không đồng nghĩa mọi cảnh phải preview
-hoặc render nhanh hơn thời gian thực. Dựng offline theo frame vẫn giữ đúng FPS.
-Preset, memory budget và ma trận nghiệm thu nằm trong [RENDER_PROFILES.md](RENDER_PROFILES.md).
-
-## 7. Mốc triển khai và nghiệm thu
-
-| Mốc | Nội dung | Điều kiện đạt |
-| --- | --- | --- |
-| 0. Chuẩn hóa | Format mã nháp, chia module, gom đúng logic chung, bật gate | Source sửa xong dễ đọc, không file vượt 800 dòng; không tiếp tục trên file dồn nghiệp vụ |
-| 1. Pipeline ảnh → 2.5D | AI tạo ảnh bằng tool của client → MCP nhập ảnh → mesh/rig → camera/bóng | Có ảnh thật, clip 5–10 giây, deform đúng, bóng theo alpha/đèn, mở lại project được |
-| 2. Rig và nhiều góc | Bone/pivot/weight, rest pose, warp, biểu cảm, view set | Chuyển góc trong phạm vi asset, không nhảy pivot hoặc trộn topology sai |
-| 3. App dựng phim | Library, timeline, clip blending, shot, camera/light | Dựng phim ngắn từ asset dùng lại; lưu/mở/undo đúng |
-| 4. Đạo diễn AI | Kịch bản → shot → asset/action → preview → sửa → export | MCP dựng được phim nhiều shot từ asset sẵn có, báo dữ liệu thiếu |
-| 5. Chất lượng bộ asset | Sinh/sửa nhiều góc bằng tool của client, layer, biểu cảm và rig | Bộ góc nhất quán, alpha thật, kết quả có thể sửa; không bắt cài model local |
-| 6. Đóng gói/tối ưu | Windows/Linux, NVENC, 2K/4K × 60/120 FPS, cache và recovery | Đúng kích thước/frame count/timestamp, có video kiểm chứng và số đo trên từng OS |
-
-Benchmark dùng RTX 3060 12 GB làm cấu hình GPU mục tiêu. Preview mục tiêu 60 FPS,
-có tùy chọn 120 FPS cho cảnh và màn hình phù hợp; cho phép giảm resolution preview
-độc lập với output 4K. Ghi CPU, RAM, driver, vertex/bone, shadow budget, frame time
-trung vị/p95, thời gian xuất, RAM/VRAM và encoder đã dùng. Không suy hiệu năng từ
-VRAM đơn thuần hoặc gọi phép xuất 4K/120 FPS offline là preview 4K/120 thời gian thực.
-
-Test quan trọng: weights chuẩn hóa; xương không chu kỳ; giới hạn IK; interpolation;
-chuyển view/topology; mask/shadow theo pose; preview/export cùng thời gian;
-UI/MCP cùng state; lưu và undo nguyên tử; ảnh nhập là kết quả thật của tool;
-output 60/120 FPS đúng frame count/timestamp, không giảm chất lượng âm thầm.
-[Chiến lược kiểm thử](TESTING_STRATEGY.md).
-
-## 8. Quy tắc code và AI
-
-Chi tiết: [CODING_RULES.md](CODING_RULES.md), [MODULE_MAP.md](MODULE_MAP.md).
-Quy tắc code người dùng đã yêu cầu có hiệu lực độc lập với duyệt kiến trúc.
-
-- Tối đa 800 dòng vật lý mỗi file source, gồm comment và dòng trống.
-- Khoảng 400–500 dòng là tín hiệu tách trách nhiệm, không phải chỉ tiêu phải đạt.
-- Không nén code/JSX/type để lách giới hạn; mỗi bước nghiệp vụ trình bày rõ.
-- Một nghiệp vụ/thuật toán có một nơi sở hữu; caller import hoặc gọi adapter.
-- Helper chung chia theo miền, không dồn tất cả vào `utils.ts` hoặc `shared.ts`.
-- Tên mô tả ý nghĩa, type tách rõ, import/public API/helper có bố cục.
-- Rule hướng dẫn AI đi cùng formatter, lint, giới hạn source, kiểm tra duplicate
-  và dependency graph; tài liệu đơn thuần không tự bảo đảm tuân thủ.
-
-Codex đọc `AGENTS.md`. Codex/Antigravity dùng `.agents/skills/<name>/SKILL.md`;
-Antigravity có workspace rule trong `.agents/rules`. Adapter client dẫn về nguồn
-quy tắc chung. [Codex rules][codex-rules], [skills][codex-skills],
-[Antigravity rules][anti-rules], [skills][anti-skills].
-
-Task lớn có thể chia cho specialist theo phạm vi độc lập. Lead chốt contract,
-giao một write owner cho mỗi file, tích hợp kết quả và chạy kiểm tra cuối; không
-gọi toàn bộ vai trò cho task nhỏ. Chi tiết nằm trong
-[giao thức team AI](AI_TEAM_PROTOCOL.md).
-
-## 9. Phạm vi hiện tại
-
-Bản đầu không gồm Blender/Godot, GLB editor, dựng model 3D, cloth/fluid, lip-sync
-nâng cao, cộng tác nhiều người hoặc render cloud. Ghép audio cơ bản theo sau video
-pipeline; sinh giọng nói cần provider hoặc tệp người dùng cung cấp.
-
-Mã trong `src/`, `shared/`, `engine/` còn là bản nháp thiếu thành phần, chưa build/
-kiểm thử và có code nén. Không dùng nó làm mẫu chất lượng. Mốc 0 sẽ chuẩn hóa phần
-phù hợp khi người dùng yêu cầu triển khai. Lượt này không refactor app hoặc cài dependency.
-
-[live2d]: https://docs.live2d.com/en/cubism-editor-manual/deformer/
-[spine-weights]: https://esotericsoftware.com/spine-weights
-[skinning]: https://threejs.org/docs/pages/SkinnedMesh.html
-[material]: https://threejs.org/docs/pages/MeshStandardMaterial.html
-[earcut]: https://github.com/mapbox/earcut
-[psd]: https://github.com/Agamnentzar/ag-psd
-[three-license]: https://github.com/mrdoob/three.js/blob/dev/LICENSE
-[spine-license]: https://esotericsoftware.com/licenses/Spine-Runtimes-License-Agreement.pdf
-[codex-rules]: https://learn.chatgpt.com/docs/agent-configuration/agents-md
-[codex-skills]: https://learn.chatgpt.com/docs/build-skills
-[anti-rules]: https://antigravity.google/docs/rules-workflows
-[anti-skills]: https://antigravity.google/docs/skills
+Bước triển khai kế tiếp là P0 và mockup tương tác cho Draw/Compose/Edit dùng asset
+mẫu, sau đó P1 với dữ liệu thật. Các thay đổi kiến trúc mới được ghi là proposed
+trong [Architecture Decisions](ARCHITECTURE_DECISIONS.md); phần code chỉ triển khai
+khi người dùng giao việc tương ứng.

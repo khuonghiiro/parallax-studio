@@ -1,302 +1,161 @@
-# Định dạng project và schema dữ liệu
+# Định dạng project cho vẽ 2D và dựng phim 2.5D
 
-Trạng thái: đề xuất thiết kế để triển khai tại mốc 0–1. Chưa có schema chính thức
-trong source; tài liệu này đặt ra hướng và ràng buộc để chốt khi triển khai.
+Trạng thái: đề xuất nâng cấp ngày 12/09/2026; chưa phải schema đã triển khai.
+Source đã có manifest, asset, scene, clip và shot trong `packages/contracts/src/`,
+state tại `packages/application/src/projects/`. Các contract sau thay mô hình
+scene/timeline đơn giản về mặt kế hoạch; phải có migration và fixture thật trước
+khi đổi dữ liệu đang lưu của người dùng.
 
-## 1. Cấu trúc thư mục project trên disk
+## 1. Tài liệu và quyền sở hữu
 
-```text
-<project-root>/
-  manifest.json            Metadata, phiên bản schema, asset registry
-  assets/
-    <asset-id>/
-      source/              Ảnh gốc (PNG, PSD layers), normal map, mask
-      views/               Ảnh/layer theo từng góc nhìn
-      landmarks.json       Tọa độ các điểm khớp (chin, wrist, knee...) cho auto-rig
-      rig.json             Bone hierarchy, weights, bindings
-      mesh.json            Contour, triangulation, UV, edge loops
-      material.json        Tint, normal map ref, roughness
-      meta.json            Tên, tag, nguồn gốc (AI brief, reference hash)
-  scenes/
-    <scene-id>/
-      scene.json           Instance list, camera, light, depth, shot
-      timeline.json        Track, clip, keyframe
-  cache/                   Dữ liệu tạo lại được
-    thumbnails/            Preview nhỏ cho asset browser
-    atlas/                 Texture atlas đã đóng gói
-    render/                Frame trung gian của job đang chạy
-  history/                 Lịch sử undo (tùy chiến lược, xem COMMAND_BUS)
-```
+| Contract đề xuất | Nội dung và ranh giới |
+| --- | --- |
+| `DrawingDocument` | Canvas 2D, hệ màu, tốc độ vẽ, cây layer, cel library; mở riêng được |
+| `DrawingLayer` | Raster, group, mask hoặc reference; order, opacity, blend, lock và exposure |
+| `Cel` | Một hình vẽ có ID; tile/blob, bounds, pivot và revision, không phải thời điểm |
+| `Exposure` | Giữ một cel hoặc để trống trên một khoảng frame của layer |
+| `AssetDefinition` | Asset tái sử dụng: parts, views, pivots, rig, mesh, material, drawing refs, clips |
+| `AnimationClip` | Chuyển động độc lập có tên, duration, tracks, exposures và asset-local bindings |
+| `AssetInstance` | Một lần đặt asset với transform, overrides và clip placements riêng |
+| `Composition` | Sân khấu 2.5D: node tree, depth planes, instances, camera routes, light, receivers |
+| `Shot` | Lần quay composition: camera, source range và override riêng |
+| `Sequence` | Bản dựng: shot placements, transition, audio, subtitle và vùng xuất |
 
-### Nguyên tắc
+Workspace `draw`, `rig`, `animate`, `compose`, `edit` mở các tài liệu này,
+không tạo năm bản sao project. Selection, active tool, onion skin, panel layout
+và playhead là session state; không tăng content revision.
 
-- `manifest.json` là điểm vào duy nhất; mở project bắt đầu từ đọc file này.
-- `cache/` có thể xóa toàn bộ mà không mất dữ liệu nguồn. App tạo lại khi cần.
-- Asset ID và scene ID dùng UUID v4, không dùng tên file hoặc chỉ số tăng dần.
-- Tên thư mục/file con dùng slug tiếng Anh, không chứa ký tự đặc biệt ngoài `-_`.
-- Đường dẫn trong manifest dùng `/` (forward slash), tương đối từ project root.
+## 2. Registry, tham chiếu và thời gian
 
-## 2. Manifest schema
+Manifest giữ project ID, schema version, content revision và registry drawing,
+asset, clip, composition, shot, sequence, media. Dùng UUID ổn định, không liên kết
+bằng tên hiển thị hoặc chỉ số mảng. `EntityRef` có `kind`, `id`, `revision`;
+tham chiếu thành phần thêm `subId`. Entity revision được bind không nhất thiết
+bằng global revision. `status` gồm `valid`, `stale`, `missing`, `incompatible`.
 
-Đây là phác thảo — schema chính thức sẽ được định nghĩa bằng Zod trong
-`packages/contracts/src/project/` và sinh JSON Schema từ đó.
+Thời gian phim dùng số nguyên tick, lưu `timebase` ticks/second; FPS là cặp
+`numerator` / `denominator`. Chọn timebase biểu diễn chính xác các tốc độ hỗ trợ
+và sample audio; không tích lũy delta float. Khoảng nửa mở `[startTick, endTick)`;
+điểm cuối không thêm frame. Frame xuất n ở thời gian phân số n/outputFPS. Duration
+xuất phải khớp output-frame boundary; nếu không UI/MCP trả lựa chọn snap và duration
+kết quả, không làm tròn âm thầm.
 
-```jsonc
-{
-  // Phiên bản schema manifest, dùng để migration
-  "schemaVersion": 1,
+`drawingFps` riêng của DrawingDocument xác định exposure grid, ví dụ 12 hoặc 24.
+Exposure dùng `startFrame` bao gồm và `endFrameExclusive` không bao gồm, quy đổi
+sang thời gian tài liệu. Xuất 120 FPS không biến 12 hình vẽ/giây thành 120 hình vẽ:
+cel được hold; camera và rig vẫn lấy mẫu 120 thời điểm. Không tự nội suy cel.
 
-  // Metadata
-  "name": "Phim ngắn mẫu",
-  "createdAt": "2026-09-11T04:00:00Z",
-  "updatedAt": "2026-09-11T04:30:00Z",
+## 3. DrawingDocument, DrawingLayer, Cel và Exposure
 
-  // Revision toàn cục, tăng mỗi lần command commit thành công
-  "revision": 42,
+DrawingDocument lưu kích thước pixel, color profile, origin, layer tree và source
+media. Group acyclic; mask ghi target và clipping scope. Layer reference không
+nhận brush; locked layer từ chối mutation. Raster cel giữ alpha và bounds gốc.
 
-  // Registry asset
-  "assets": {
-    "<asset-id>": {
-      "name": "Nhân vật chính",
-      "type": "character",         // character | prop | background
-      "directory": "assets/<asset-id>",
-      "views": ["front", "quarter-left", "quarter-right"],
-      "hasRig": true,
-      "sourceHash": "sha256:abcdef...",
-      "createdRevision": 5,
-      "updatedRevision": 38
-    }
-  },
+Một cel được nhiều exposure tham chiếu. Sửa linked cel tác động mọi nơi dùng và
+UI phải báo phạm vi; duplicate tạo ID mới để sửa độc lập. Gap nghĩa là blank,
+không hold vô hạn. Exposures cùng layer không chồng nhau. Hold, insert/delete frame
+là mutation rõ. Onion skin chỉ preview, không ghi vào cel hoặc export.
 
-  // Registry scene
-  "scenes": {
-    "<scene-id>": {
-      "name": "Cảnh mở đầu",
-      "directory": "scenes/<scene-id>",
-      "createdRevision": 10,
-      "updatedRevision": 42
-    }
-  },
+V1 dùng raster cel chỉnh sửa được. Vector path/symbol là loại layer version hóa
+tương lai, không hứa vector authoring từ stroke chỉ lưu pixel. Brush metadata có
+preset/version, spacing, pressure mapping, canvas transform; source tile là kết
+quả có thẩm quyền. Gom samples khi preview, commit một tile delta và một undo entry.
+Cancel hoặc pointer capture loss không để nửa stroke đã commit.
 
-  // Cài đặt mặc định
-  "defaults": {
-    "timelineFps": 24,
-    "previewFps": 60,
-    "exportProfile": "4k-uhd-60"   // Tham chiếu tên preset trong RENDER_PROFILES
-  }
-}
-```
+## 4. AssetDefinition, mesh và rig
 
-### Quy tắc phiên bản schema
+Asset phân loại character, animal, prop, background, effect; animal có template
+riêng. Parts tham chiếu drawing layer/cel hoặc media bằng ID và revision; mỗi view
+có origin, pivot, draw order. Assembly giữ transform, parenting acyclic và visibility,
+không flatten nguồn. Hai instance không chia sẻ mutable pose.
 
-- `schemaVersion` là số nguyên tăng dần, bắt đầu từ 1.
-- Khi mở project có `schemaVersion` cũ hơn phiên bản app hỗ trợ: chạy migration
-  tự động, tạo bản sao lưu manifest cũ (`.manifest.v<N>.bak.json`), ghi log thay đổi.
-- Khi mở project có `schemaVersion` mới hơn: báo lỗi rõ, không cố parse.
-- Migration không được làm mất dữ liệu. Trường cũ bị xóa phải có mapping rõ ràng
-  sang cấu trúc mới trong hàm migration.
+Binding mỗi part là `rigid` hoặc `skinned`. Mesh lưu contour/hole constraints,
+vertices, indices, UV, topology revision và algorithm/version. Rig lưu local rest
+transform, inverse bind matrices, bone IDs, limits và landmark template version.
+Skin tối đa 4 influence/vertex; giữ top 4 rồi chuẩn hóa tổng 1 với tolerance 0.001;
+vertex không influence phải được báo hoặc bind rõ. Weights/morph ghi topology
+revision tương thích. Landmark keys thuộc template version, không có bản UI/MCP riêng.
 
-## 3. Asset data
+Provenance trên từng artifact: hash, alpha convention, color-space, kích thước,
+brief và reference nếu có. Blob lớn dùng binary có checksum/schema metadata,
+không base64 ảnh lớn trong JSON. Mesh lỗi có diagnostic và vùng lỗi để sửa tay.
 
-### Layer và view
+Đổi contour, vertex, UV, view, bone parent/rest pose tạo dependency report cho
+clip/instance/shot. Không âm thầm dùng weights/morph cũ hoặc xóa track mất target.
+Cho phép giữ bản cũ, preview rebind, regenerate với bản sao khôi phục.
 
-Mỗi view (góc nhìn) của một asset chứa:
+## 5. AnimationClip và ClipPlacement
 
-| Trường | Kiểu | Mô tả |
-| --- | --- | --- |
-| `viewId` | string | Tên góc: `front`, `quarter-left`, `side-left`, `back` |
-| `layers` | Layer[] | Danh sách layer có thứ tự draw order |
-| `pivot` | `{ x, y }` | Điểm gốc trong tọa độ texture, đơn vị pixel |
-| `drawOrder` | number[] | Chỉ số sắp xếp layer khi vẽ |
+Clip chứa asset-local tracks: bone/part transform, deformer, visibility, view,
+exposure. Track dùng typed target/property/value schema; không ghi object bằng
+property string tùy ý. Binding chứa entity/component IDs, rig/topology revision,
+compatibility signature; tên bone trùng không đủ để tự retarget.
 
-Mỗi layer:
+`ClipPlacement` tham chiếu clip và instance đích: start/end tick, source in,
+playback rate, loop mode, blend weights, channel mask. Trim/offset/speed chỉ sửa
+placement. Edit Clip báo những nơi dùng; Make Unique tạo ID mới. Walk và blink
+phối hợp trên channel khác; overlap cùng channel có priority/blend rule xác định.
+Clip-local motion và world travel riêng; không áp root motion hai lần.
 
-| Trường | Kiểu | Mô tả |
-| --- | --- | --- |
-| `layerId` | string | UUID |
-| `name` | string | Tên mô tả: `head`, `torso`, `left-arm` |
-| `colorPath` | string | Đường dẫn ảnh màu, tương đối từ asset dir |
-| `alphaMaskPath` | string? | Nếu alpha tách riêng khỏi ảnh màu |
-| `normalMapPath` | string? | Normal map tùy chọn |
-| `bounds` | `{ x, y, width, height }` | Vị trí và kích thước trong canvas asset |
+Animate preview không cần composition. Test pose/playhead không sửa rest pose;
+auto-key phải bật rõ. Library entry đóng gói dependency IDs/revisions để relink
+có kiểm tra; không phụ thuộc đường dẫn nguồn tạm của project khác.
 
-### Rig
+## 6. Composition, Shot và Sequence
 
-```jsonc
-{
-  "bones": [
-    {
-      "boneId": "bone-001",
-      "name": "spine",
-      "parentId": null,             // null = root bone
-      "position": { "x": 0, "y": 0 },  // local offset từ parent, đơn vị pixel
-      "rotation": 0,                // radian, local
-      "length": 50                  // pixel
-    }
-  ],
-  "bindings": [
-    {
-      "layerId": "layer-001",
-      "boneId": "bone-001",
-      "weights": [/* per-vertex weights */]
-    }
-  ]
-}
-```
+Composition node có `parentId`, local transform và depth plane ref. Chốt world
+unit, axis, handedness cùng runtime; depth plane, draw order trong plane và camera Z
+khác nhau. Reparent có giữ world transform, từ chối cycle. Lock, visibility,
+solo preview, cast/receive shadow có ý nghĩa riêng.
 
-Invariant:
-- Hierarchy phải acyclic; validate bằng topological sort khi load.
-- Mỗi vertex có tối đa 4 bone influence; weights chuẩn hóa tổng = 1.0.
-- Rest pose là trạng thái khi chưa áp animation; lưu riêng cho mỗi view.
+Camera rig có ID, projection, lens/zoom, clipping, target, route tracks. Route lưu
+timed keys/control points, orientation/aim, interpolation/ease; preview đường đi,
+camera frame, safe area. Perspective tạo parallax từ depth; orthographic không
+tự scale theo Z. Parallax factor nghệ thuật phải thành operator lưu rõ dùng chung
+preview/export.
 
-### Landmarks
+Shot tham chiếu composition revision, camera, source range, shot-local overrides.
+Override không sửa nguồn; nhiều shot nhìn cùng composition từ camera khác.
+`ShotPlacement` lưu shot ref, sequence range, source in và transition.
 
-Dùng cho quy trình Auto-Rig (Mixamo-style, xem [AUTO_RIG.md](AUTO_RIG.md)):
+Sequence có video tracks, `AudioClip`, `SubtitleCue`. Audio lưu media ref,
+source sample range/rate, gain, fade, mute; subtitle lưu text, language, style,
+tick range. Dissolve cần handles hai phía, thiếu phải báo. Waveform/proxy là cache;
+media gốc là source. Sequence chọn vùng xuất độc lập clip authoring duration.
 
-```jsonc
-{
-  "templateId": "humanoid-v1",
-  "status": "confirmed",            // estimated | confirmed | manual
-  "points": {
-    "chin": { "x": 512, "y": 280 },
-    "neck": { "x": 512, "y": 320 },
-    "left_shoulder": { "x": 420, "y": 360 },
-    "right_shoulder": { "x": 604, "y": 360 },
-    "left_elbow": { "x": 360, "y": 480 },
-    "right_elbow": { "x": 664, "y": 480 },
-    "left_wrist": { "x": 310, "y": 600 },
-    "right_wrist": { "x": 714, "y": 600 },
-    "left_knee": { "x": 460, "y": 750 },
-    "right_knee": { "x": 564, "y": 750 },
-    "left_ankle": { "x": 450, "y": 920 },
-    "right_ankle": { "x": 574, "y": 920 }
-  }
-}
-```
+## 7. Save, migration và recovery
 
-### Mesh
+Layout đề xuất gồm manifest pointer, generation registry chứa drawing/asset/clip/
+composition/shot/sequence, media theo hash, recovery và cache. Save chụp revision
+nhất quán, ghi generation/media mới, kiểm hash rồi publish manifest cuối cùng.
+Flush/atomic replace phải thử Windows/Linux; crash vẫn mở được generation cũ.
+Save cập nhật persisted revision, không tăng content revision. Edit trong khi save
+vẫn dirty. Một transaction/batch tăng một content revision.
 
-```jsonc
-{
-  "contours": [/* mảng điểm viền */],
-  "vertices": [/* tọa độ sau triangulation */],
-  "indices": [/* tam giác */],
-  "uvs": [/* UV tương ứng vertices */],
-  "edgeLoops": [/* mảng danh sách vertex index tạo thành vòng quanh khớp */],
-  "topology": "earcut-v1"          // Đánh dấu phương pháp triangulation
-}
-```
+Migration ghi bản mới bên cạnh, giữ backup đầy đủ và báo mapping trước publish.
+Inclusive endFrame hiện tại đổi sang exclusive theo frame unit tài liệu cũ, không
+FPS xuất. Scene cũ map Composition; giữ ID khi mapping rõ. Không đoán FPS/parent/
+clip target thiếu: mở recovery để relink. Schema mới hơn chỉ read-only nếu safe
+reader hỗ trợ, nếu không từ chối.
 
-## 4. Scene data
+Autosave mặc định 2 phút vào recovery riêng; so sánh revision/thời điểm trước
+khôi phục, không đè nguồn âm thầm. Undo stack là session data; recovery dùng snapshot/
+journal riêng. Cache xóa được; drawing tiles/rig/mesh/clip/media không phải cache.
 
-```jsonc
-{
-  "instances": [
-    {
-      "instanceId": "inst-001",
-      "assetId": "<asset-id>",
-      "position": { "x": 0, "y": 0, "z": 0 },  // z = depth
-      "scale": { "x": 1, "y": 1 },
-      "rotation": 0
-    }
-  ],
-  "camera": {
-    "type": "orthographic",         // orthographic | perspective
-    "position": { "x": 0, "y": 0, "z": 100 },
-    "zoom": 1,
-    "near": 0.1,
-    "far": 1000
-  },
-  "lights": [
-    {
-      "lightId": "light-001",
-      "type": "directional",
-      "direction": { "x": -1, "y": -1, "z": -1 },
-      "color": "#ffffff",
-      "intensity": 1.0,
-      "castShadow": true
-    }
-  ],
-  "shadowReceivers": [
-    {
-      "type": "plane",
-      "normal": { "x": 0, "y": 1, "z": 0 },
-      "offset": -100
-    }
-  ]
-}
-```
+Path tương đối, kiểm canonical path/symlink/MIME/dimensions/quota trước I/O.
+Relink ngoài project qua import có hash; MCP không vượt root. Publish library copy
+hoặc pin mọi dependency; xóa project gốc không làm asset thư viện mất nguồn.
 
-## 5. Timeline và animation
+## 8. Nghiệm thu và liên kết
 
-```jsonc
-{
-  "duration": 10.0,                 // giây
-  "tracks": [
-    {
-      "trackId": "track-001",
-      "targetType": "instance",     // instance | camera | light
-      "targetId": "inst-001",
-      "clips": [
-        {
-          "clipId": "clip-001",
-          "startTime": 0.0,
-          "endTime": 5.0,
-          "keyframes": [
-            {
-              "time": 0.0,          // giây, tương đối từ startTime
-              "property": "position.x",
-              "value": 0,
-              "easing": "ease-in-out"
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
+- Save/reopen giữ linked cel, holds, pivots, rig, clips, composition, camera route,
+  shots, audio/subtitle và dependency revision.
+- Hai instance dùng một clip khác offset; sửa placement đầu không đổi clip/instance sau.
+- Remesh báo stale; cancel khôi phục; rebind không để orphan tracks.
+- Một giây vẽ 12 FPS xuất đúng 60/120 frame, giữ 12 cel và timing.
+- Crash tại mọi bước save/migration khôi phục một generation nhất quán.
 
-Thời gian trong timeline luôn tính bằng giây. Chuyển sang frame index dùng
-`frameIndex = time × fps`. Xem [RENDER_PROFILES.md](RENDER_PROFILES.md) cho
-ba loại FPS và cách lấy mẫu.
-
-## 6. Lưu và mở project
-
-### Lưu (save)
-
-1. Serialize state hiện tại thành JSON theo schema.
-2. Ghi file tạm (`<file>.tmp`) rồi rename atomic — tránh corrupt nếu crash giữa chừng.
-3. Cập nhật `revision` trong manifest.
-4. Cache (thumbnail, atlas) được ghi riêng, không chặn save.
-
-### Mở (load)
-
-1. Đọc `manifest.json`, kiểm tra `schemaVersion`.
-2. Migration nếu cần (xem mục 2).
-3. Validate tham chiếu: asset ID trong scene phải tồn tại trong manifest.
-4. Lazy-load texture và mesh — không đọc toàn bộ ảnh vào RAM khi mở project.
-5. Báo lỗi cụ thể nếu thiếu file, ID không hợp lệ hoặc schema version không hỗ trợ.
-
-### Autosave và recovery
-
-- Autosave định kỳ (mặc định 2 phút) vào thư mục tạm riêng.
-- Khi mở project phát hiện autosave mới hơn manifest: hỏi người dùng có khôi phục.
-- Không âm thầm ghi đè project gốc bằng autosave.
-
-## 7. Phân biệt source vs. cache
-
-| Loại | Ví dụ | Xóa được? | Nằm trong VCS? |
-| --- | --- | --- | --- |
-| Source | Ảnh gốc, rig, mesh, scene, timeline | ❌ | ✅ |
-| Cache | Thumbnail, atlas, render frame tạm | ✅ | ❌ (.gitignore) |
-| History | Undo stack, snapshot | Tùy policy | ❌ |
-
-## 8. Liên kết
-
-- [PLAN.md](PLAN.md) mục 5, 7 — yêu cầu project format
-- [COMMAND_BUS.md](COMMAND_BUS.md) — cách revision và undo tương tác với lưu project
-- [MODULE_MAP.md](MODULE_MAP.md) — `packages/contracts/src/` sở hữu schema,
-  `apps/service/src/adapters/persistence/` sở hữu I/O
-- [AUTO_RIG.md](AUTO_RIG.md) — chi tiết landmarks và auto-rig format
-- [UI_SPECIFICATION.md](UI_SPECIFICATION.md) — tương tác UI với cấu trúc project
+Tham chiếu: [PLAN.md](PLAN.md), [COMMAND_BUS.md](COMMAND_BUS.md),
+[MODULE_MAP.md](MODULE_MAP.md), [AUTO_RIG.md](AUTO_RIG.md),
+[UI_SPECIFICATION.md](UI_SPECIFICATION.md), [RENDER_PROFILES.md](RENDER_PROFILES.md),
+[TESTING_STRATEGY.md](TESTING_STRATEGY.md).

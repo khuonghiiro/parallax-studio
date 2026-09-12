@@ -8,8 +8,14 @@ import type { Contour, ContourExtractionResult } from './mesh-validation.js';
 const ALPHA_THRESHOLD = 128;
 
 /**
+ * Minimum pixel count for a transparent region to be considered a hole.
+ * Filters out single-pixel or micro alpha noise.
+ */
+const MIN_HOLE_PIXELS = 4;
+
+/**
  * Extract the outer contour and holes from image alpha data.
- * Uses a marching-squares-like approach to trace the boundary.
+ * Uses Moore neighborhood boundary tracing and exterior flood fill for hole detection.
  *
  * @param alphaData Flat array of alpha values (one per pixel, 0-255).
  * @param width Image width in pixels.
@@ -30,23 +36,41 @@ export function extractContour(
     );
   }
 
-  // Create binary mask
+  // Create binary mask: true = opaque, false = transparent
   const mask = createBinaryMask(alphaData, width, height);
 
+  // Find first opaque pixel (top-left)
+  const outerStart = findFirstPixel(mask, width, height, true);
+  if (!outerStart) {
+    throw new Error('No contour found in the image');
+  }
+
   // Trace outer boundary
-  const outerRaw = traceOuterContour(mask, width, height);
+  const outerRaw = traceBoundary(
+    (x, y) => getPixel(mask, x, y),
+    outerStart.x,
+    outerStart.y,
+    width,
+    height,
+  );
 
   if (outerRaw.length < 3) {
     throw new Error('No contour found in the image');
   }
 
-  // Simplify to reduce vertex count
+  // Simplify outer contour
   const outerSimplified = simplifyContour(outerRaw, simplifyTolerance);
+  if (outerSimplified.length < 3) {
+    throw new Error('Simplified contour has fewer than 3 points');
+  }
 
   const outer: Contour = { points: outerSimplified };
+  const outerArea = computeSignedArea(outer.points);
 
-  // For MVP: no hole detection. Holes will be added later.
-  return { outer, holes: [] };
+  // Extract interior holes (transparent regions enclosed by opaque pixels)
+  const holes = extractHoles(mask, width, height, simplifyTolerance, outerArea);
+
+  return { outer, holes };
 }
 
 /**
@@ -73,34 +97,238 @@ function createBinaryMask(
 }
 
 /**
- * Trace the outer contour of a binary mask.
- * Finds the first opaque pixel and traces the boundary clockwise.
+ * Extract all interior holes enclosed within the opaque silhouette.
  */
-function traceOuterContour(
+function extractHoles(
   mask: boolean[][],
   width: number,
   height: number,
-): Point2D[] {
-  // Find the first opaque pixel (top-left)
-  let startX = -1;
-  let startY = -1;
+  simplifyTolerance: number,
+  outerArea: number,
+): Contour[] {
+  // 1. Mark all transparent pixels connected to the image border as exterior
+  const exterior = findExteriorMask(mask, width, height);
 
-  outer:
+  // 2. Scan for interior transparent components that are not exterior
+  const visited: boolean[][] = Array.from({ length: height }, () =>
+    new Array<boolean>(width).fill(false),
+  );
+
+  const holes: Contour[] = [];
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (getPixel(mask, x, y)) {
-        startX = x;
-        startY = y;
-        break outer;
+      // Look for unvisited, non-exterior transparent pixel
+      if (!mask[y]![x] && !exterior[y]![x] && !visited[y]![x]) {
+        const holeComponent = collectHoleComponent(mask, exterior, visited, x, y, width, height);
+
+        if (holeComponent.length >= MIN_HOLE_PIXELS) {
+          const holeContour = buildHoleContour(
+            holeComponent,
+            width,
+            height,
+            simplifyTolerance,
+            outerArea,
+          );
+          if (holeContour) {
+            holes.push(holeContour);
+          }
+        }
       }
     }
   }
 
-  if (startX === -1) {
-    return [];
+  return holes;
+}
+
+/**
+ * Flood-fill from image boundaries to mark exterior background pixels.
+ */
+function findExteriorMask(
+  mask: boolean[][],
+  width: number,
+  height: number,
+): boolean[][] {
+  const exterior: boolean[][] = Array.from({ length: height }, () =>
+    new Array<boolean>(width).fill(false),
+  );
+
+  const queue: Array<[number, number]> = [];
+
+  // Seed boundary transparent pixels
+  for (let x = 0; x < width; x++) {
+    if (!mask[0]![x] && !exterior[0]![x]) {
+      exterior[0]![x] = true;
+      queue.push([x, 0]);
+    }
+    const bottomY = height - 1;
+    if (!mask[bottomY]![x] && !exterior[bottomY]![x]) {
+      exterior[bottomY]![x] = true;
+      queue.push([x, bottomY]);
+    }
   }
 
-  // 8-connected boundary tracing (Moore neighborhood)
+  for (let y = 0; y < height; y++) {
+    if (!mask[y]![0] && !exterior[y]![0]) {
+      exterior[y]![0] = true;
+      queue.push([0, y]);
+    }
+    const rightX = width - 1;
+    if (!mask[y]![rightX] && !exterior[y]![rightX]) {
+      exterior[y]![rightX] = true;
+      queue.push([rightX, y]);
+    }
+  }
+
+  // 4-way BFS flood fill
+  const dirs = [
+    [1, 0], [-1, 0], [0, 1], [0, -1],
+  ];
+
+  let head = 0;
+  while (head < queue.length) {
+    const [cx, cy] = queue[head++]!;
+
+    for (const [dx, dy] of dirs) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+
+      if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+        if (!mask[ny]![nx] && !exterior[ny]![nx]) {
+          exterior[ny]![nx] = true;
+          queue.push([nx, ny]);
+        }
+      }
+    }
+  }
+
+  return exterior;
+}
+
+/**
+ * Collect all connected pixels of an interior hole using BFS.
+ */
+function collectHoleComponent(
+  mask: boolean[][],
+  exterior: boolean[][],
+  visited: boolean[][],
+  startX: number,
+  startY: number,
+  width: number,
+  height: number,
+): Array<[number, number]> {
+  const pixels: Array<[number, number]> = [];
+  const queue: Array<[number, number]> = [[startX, startY]];
+  visited[startY]![startX] = true;
+
+  const dirs = [
+    [1, 0], [-1, 0], [0, 1], [0, -1],
+  ];
+
+  let head = 0;
+  while (head < queue.length) {
+    const [cx, cy] = queue[head++]!;
+    pixels.push([cx, cy]);
+
+    for (const [dx, dy] of dirs) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+
+      if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+        if (!mask[ny]![nx] && !exterior[ny]![nx] && !visited[ny]![nx]) {
+          visited[ny]![nx] = true;
+          queue.push([nx, ny]);
+        }
+      }
+    }
+  }
+
+  return pixels;
+}
+
+/**
+ * Trace, simplify, and normalize a hole contour from its pixel component.
+ */
+function buildHoleContour(
+  holePixels: Array<[number, number]>,
+  width: number,
+  height: number,
+  simplifyTolerance: number,
+  outerArea: number,
+): Contour | null {
+  // Build a lookup set for fast pixel checking
+  const holeSet = new Set<string>();
+  let startX = Infinity;
+  let startY = Infinity;
+
+  for (const [x, y] of holePixels) {
+    holeSet.add(`${x},${y}`);
+    if (y < startY || (y === startY && x < startX)) {
+      startX = x;
+      startY = y;
+    }
+  }
+
+  if (startX === Infinity) {
+    return null;
+  }
+
+  const rawHole = traceBoundary(
+    (x, y) => holeSet.has(`${x},${y}`),
+    startX,
+    startY,
+    width,
+    height,
+  );
+
+  if (rawHole.length < 3) {
+    return null;
+  }
+
+  const simplified = simplifyContour(rawHole, simplifyTolerance);
+  if (simplified.length < 3) {
+    return null;
+  }
+
+  // Ensure hole winding is opposite to outer winding for Earcut triangulation
+  const holeArea = computeSignedArea(simplified);
+  let finalPoints = [...simplified];
+  if (outerArea * holeArea > 0) {
+    finalPoints = finalPoints.reverse();
+  }
+
+  return { points: finalPoints };
+}
+
+/**
+ * Find the first pixel in the mask matching the target state.
+ */
+function findFirstPixel(
+  mask: boolean[][],
+  width: number,
+  height: number,
+  target: boolean,
+): Point2D | null {
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (getPixel(mask, x, y) === target) {
+        return { x, y };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * 8-connected boundary tracing (Moore neighborhood).
+ */
+function traceBoundary(
+  isTarget: (x: number, y: number) => boolean,
+  startX: number,
+  startY: number,
+  width: number,
+  height: number,
+): Point2D[] {
   const points: Point2D[] = [];
   const directions: [number, number][] = [
     [1, 0], [1, 1], [0, 1], [-1, 1],
@@ -119,7 +347,7 @@ function traceOuterContour(
 
     // Look for next boundary pixel
     let found = false;
-    const startDir = (dir + 5) % 8; // Start search from dir - 3
+    const startDir = (dir + 5) % 8; // Backtrack direction
 
     for (let i = 0; i < 8; i++) {
       const d = (startDir + i) % 8;
@@ -127,7 +355,7 @@ function traceOuterContour(
       const nx = cx + delta[0];
       const ny = cy + delta[1];
 
-      if (getPixel(mask, nx, ny)) {
+      if (nx >= 0 && nx < width && ny >= 0 && ny < height && isTarget(nx, ny)) {
         cx = nx;
         cy = ny;
         dir = d;
@@ -162,7 +390,6 @@ function getPixel(mask: boolean[][], x: number, y: number): boolean {
 
 /**
  * Simplify a contour using the Ramer-Douglas-Peucker algorithm.
- * Reduces the number of points while preserving the shape.
  */
 function simplifyContour(
   points: readonly Point2D[],
@@ -189,7 +416,6 @@ function rdpSimplify(
   const first = points[0]!;
   const last = points[points.length - 1]!;
 
-  // Find the point with maximum distance from the line
   let maxDist = 0;
   let maxIndex = 0;
 
@@ -205,7 +431,6 @@ function rdpSimplify(
     const left = rdpSimplify(points.slice(0, maxIndex + 1), epsilon);
     const right = rdpSimplify(points.slice(maxIndex), epsilon);
 
-    // Combine, removing duplicate point at the junction
     return [...left.slice(0, -1), ...right];
   }
 
@@ -236,4 +461,21 @@ function perpendicularDistance(
   );
 
   return area / Math.sqrt(lengthSq);
+}
+
+/**
+ * Compute signed area of a 2D polygon.
+ * Positive = counter-clockwise, Negative = clockwise.
+ */
+function computeSignedArea(points: readonly Point2D[]): number {
+  let area = 0;
+  const n = points.length;
+
+  for (let i = 0; i < n; i++) {
+    const current = points[i]!;
+    const next = points[(i + 1) % n]!;
+    area += current.x * next.y - next.x * current.y;
+  }
+
+  return area / 2;
 }

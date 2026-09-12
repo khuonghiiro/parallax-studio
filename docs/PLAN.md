@@ -1,294 +1,176 @@
-# Parallax Studio — 2D to 2.5D Plan
+# Parallax Studio — 2D studio and 2.5D filmmaking plan
 
-Updated: 11/09/2026. Status: proposed for user review.
+Updated 2026-09-12. Status: proposed vNext for user review before implementation.
+This change updates documentation; it does not certify that the app implements or passes the features below.
 
-This plan replaces the previous Blender/Python approach. The current turn only
-updates documentation, rules, skills, and rule-checking tools; it does not continue
-app feature development.
+## 1. Direction and baseline
 
-## 1. Direction
+Goal: draw or import layered images → create drawn/rigged clips → assemble depth
+layers → camera/light → edit multiple shots with audio/subtitles → export a film.
+No Blender, Godot, or 3D model is required. Flat meshes, cameras and lights in 3D
+space serve 2D artwork; the product does not become a model authoring application.
 
-Create an application specialized in processing 2D images, skeletal rigging,
-facial/body deformation, multi-angle view management, and 2.5D filmmaking. It does
-not depend on Blender or Godot. 3D models/GLB are outside the scope of the first release.
+Current code includes a React editor, packages/contracts/core/application/runtime,
+service, MCP and exporter. Module existence does not establish a complete workflow.
+Source review on September 12 found:
 
-Users work with images, layers, bones, poses, and clips. The engine uses flat meshes,
-cameras, and depth coordinates to create parallax and shadows. Calculations in 3D
-space do not require users to author or import complete 3D models.
+| Area | Current issue to address |
+| --- | --- |
+| UI | Setup/Animate; fixed idle/walk/ready clips; mixed asset and shot contexts |
+| Filmmaking | Scene composer exists but full layer assembly, camera path and sequence workflow is unverified |
+| Mesh/rig | Contour does not preserve holes; UV/weights contain assumptions needing fixes and varied fixtures |
+| MCP | Remote relay still mutates locally; timeout fallback can split state |
+| Export | App path records canvas for 5 seconds at 24 FPS; frame-correct sequence export remains unverified |
 
-Prioritize one renderer for both preview and export, one business-logic layer for
-UI and MCP, and a project format that can be reopened and edited. Do not rebuild
-capabilities that established libraries already provide well.
+Do not describe current code as a draft that has never built; rerun build/test and
+inspect the actual UI during implementation. The table records source inspection,
+not an executed application acceptance test.
 
-Additional accepted requirements: use the image-generation tools already available
-in Codex/Antigravity and import their results through MCP; export films at 60/120 FPS
-in 2K/4K. The user's target GPU is an NVIDIA RTX 3060 with 12 GB VRAM. Details are
-separated into the [image-creation workflow](IMAGE_WORKFLOW.md) and
-[render profiles](RENDER_PROFILES.md).
+## 2. Creative workflow and data boundaries
 
-## 2. Multi-angle mechanism from images
+Five workspaces within one project:
 
-```mermaid
-flowchart LR
-  A[Source image or view set] --> B[Layers and masks]
-  B --> C[2D mesh and UV]
-  C --> D[Bones and weights]
-  D --> E[Pose, expression, view transition]
-  E --> F[Reusable clips]
-  F --> G[Depth scene, camera, lights]
-  G --> H[Multi-shot timeline]
-  H --> I[Video]
-```
-
-| Mechanism | Purpose | Required data |
+| Workspace | Work | Result |
 | --- | --- | --- |
-| Bones and skinning | Bend arms/legs, neck, and tail | Bones, mesh, and weights |
-| Warp and morph poses | Subtle face turns, blinking, mouth, squash/stretch | Control grid and sample poses |
-| View set | Front, three-quarter, side, and back views when provided | Image/layers and corresponding bindings for each view |
+| draw | Brush, layer assembly, cels, onion skin, exposure | DrawingDocument |
+| rig | Manual/automatic mesh, skeleton, weights, test pose | AssetDefinition with valid bindings |
+| animate | Asset-local clip: keys, curves, cels, loop | Reusable AnimationClip |
+| compose | AssetInstance, Z planes, clip placements, camera/light | Composition and Shot |
+| edit | Shot editing, dialogue/music/SFX, subtitles, render queue | Sequence and video |
 
-Live2D documents mesh deformation and deformers for face turns and motion; Spine
-documents weighted skinning. These are mechanism references, not required
-dependencies. [Live2D deformers][live2d], [Spine weights][spine-weights].
-The auto-rig mechanism (landmarks, auto-skeleton, and auto-weights) and mesh
-topology are specified in detail in [AUTO_RIG.md](AUTO_RIG.md).
+DrawingDocument contains DrawingLayer, Cel and Exposure. AssetDefinition is the
+source; AssetInstance is a placement in Composition. AnimationClip uses asset-local
+time; ClipPlacement maps a clip onto an instance. Shot selects a composition, camera
+and range; Sequence places shots in film time.
+[Project Format](PROJECT_FORMAT.md) owns the precise schema and timebase.
 
-### View sets
+Frame-by-frame does not require bones. Rigid cutout, deformable mesh and cel
+substitutions can coexist in one asset. Multiple views require corresponding
+images/layers and bindings; a single image cannot reliably reveal hidden angles.
+Morph only between compatible topologies; otherwise switch views explicitly.
+Normal maps affect lighting, not volume.
 
-- Start with a front view and two three-quarter views; add two side views when the
-  asset requires them.
-- Each view stores its own layers, pivots, draw order, and bindings; semantically
-  equivalent bones keep the same names.
-- The head and body may switch views independently when supported by the asset set.
-- Interpolate meshes only when their topology and correspondence are compatible.
-- If topology differs, switch views at a suitable marker or use a verified blend;
-  do not blend non-corresponding vertices.
-- A clip or parameter controls the view. Selection may follow direction relative to
-  the camera, with stable thresholds to prevent flicker at view boundaries.
-- When the back view is missing, report the missing view; do not pretend the front
-  image is enough for a full 360-degree turn.
+## 3. Platform and library reuse
 
-One image does not contain occluded regions or a rear view. AI can draw additional
-views, but clothing, proportions, and details must be checked for consistency.
-Generating a view set is a separate step from mesh generation and rigging, and the
-user can adjust every result.
+Keep the existing architecture; do not replace frameworks to fix the UI.
 
-### 2D materials
+| Component | Implementation direction |
+| --- | --- |
+| UI | React + TypeScript; consolidate components/tokens, Lucide and specialized SVG |
+| Runtime | Three.js/WebGL2; shared evaluator and renderer for preview/export |
+| Geometry | Reuse Earcut for triangulation; own contour, constraints, UV and validation |
+| Drawing | Raster-first, brush/stroke/tile cache; no second scene renderer |
+| Import | PNG/layer sequences first; PSD through a tested subset adapter |
+| Contracts/MCP | Shared Zod/schema, TypeScript MCP SDK; service owns project state |
+| Desktop | Tauri/Rust for shell, file/process lifecycle and Windows/Linux packaging |
+| Export | Deterministic frame sampling + FFmpeg; probe NVENC and explicit fallback |
 
-Each layer has a color image, alpha/mask, and optional normal map, roughness, and
-tint. Flat color is the default style; an additional lighting mode provides a sense
-of volume. A normal map only changes the lighting response; it does not create
-geometry or hidden angles. An advanced depth map is a later feature and does not
-replace a view set.
+Verify actual dependencies, versions and licenses before adding a library. These
+are reuse directions, not claims that every adapter is installed. Do not include
+conditionally licensed commercial runtimes merely because their editors have
+similar features. TypeScript owns shared logic; move hot paths to Rust/WASM only
+after measurements. No local model, Python service or separate image API key in
+the default workflow.
 
-## 3. Proposed libraries and languages
+## 4. UI, camera and image quality
 
-| Component | Choice | Scope |
+[UI Specification](UI_SPECIFICATION.md) replaces two modes with workspaces whose
+timelines cover exposure, asset keys/curves, composition clips/camera and sequence
+editing. Compose provides Stage Perspective/Top/Side for layer placement alongside
+Final Camera View for framing. Editor navigation and film cameras are separate;
+moving the viewer does not create camera keys.
+
+Perspective plus Z planes produces parallax; orthographic retains flat behavior.
+Draw order within a plane differs from depth. Instances have independent transform,
+time offset and clips without moving source assets. Camera path/ease/pan/dolly/zoom
+have explicit scope. Light/shadow follows alpha and deformed geometry; floor/wall
+receivers use built-in planes. Unlit style, silhouette shadows and artistic shadows
+are named modes. 2D cards have edge/back-view limitations; do not promise volumetric
+shadows equivalent to full models.
+
+Mesh must preserve holes/islands, source-image UV, valid weights and intact joints.
+Provide preview/apply, manual vertex/bone/weight editing and extreme pose tests;
+vertex counts or a 30-second auto-rig promise cannot replace validation.
+See [Auto Rig](AUTO_RIG.md), [Image Workflow](IMAGE_WORKFLOW.md) and
+[Deformation Pipeline](DEFORMATION_PIPELINE.md).
+
+## 5. AI/MCP and reliability
+
+UI/MCP share the Application Service and project revision. Separate durable
+commands, session selection/playback and read/job APIs. Commit each gesture once;
+transactions are atomic, retries have receipts/idempotency and conflicts have a
+recovery path. Never mutate locally after remote success or an uncertain timeout.
+
+AI reads capabilities/context → plans shots → creates/imports real images with the
+client's tool → assembles assets/clips/shots → renders an artifact preview →
+reviews/revises → starts an export job. MCP cannot inherently invoke internal
+Codex/Antigravity image tools. UI shows handoff/waiting when the client or file is
+missing. Metadata is not a preview image.
+Connection Center shows service/session/project/capabilities and actionable errors.
+[Command Bus](COMMAND_BUS.md) and [MCP Tools](MCP_TOOLS.md) own these contracts.
+
+## 6. Preview, audio and export
+
+Cel authored FPS, preview FPS and output FPS are independent. Sample camera/bones
+at output times; deliberate cel holds remain stepped. Use ticks/rational rates,
+half-open ranges and sequence → shot → composition → clip mapping from Project Format.
+Share the evaluator/deformation pipeline; do not duplicate 60 FPS frames to claim 120.
+
+The first filmmaking release includes cuts, audio tracks with waveform/gain/fade/
+A-V sync and basic subtitles. Do not defer audio indefinitely while claiming a
+complete filmmaking workflow. Render Queue selects Sequence/Shot/Range and a
+snapshot revision; sample all frames offline, stream bounded buffers to FFmpeg
+and show real errors/cancellation/files. Headless comes later.
+[Render Profiles](RENDER_PROFILES.md) retains Full HD/2K/QHD/4K and 24/30/60/120 FPS output.
+
+RTX 3060 12 GB is the target GPU, not proof that all scenes preview at 4K/120.
+Preview targets 60 FPS at adaptive resolution; 120 FPS depends on benchmarks.
+4K/120 export may run slower than real time while producing correct output.
+
+## 7. Implementation milestones and exit criteria
+
+| Milestone | Scope | Exit criteria before expansion |
 | --- | --- | --- |
-| UI | React + TypeScript + Lucide Icons | Asset editor, rig editor, timeline, and inspector ([UI details](UI_SPECIFICATION.md)) |
-| Rendering | Three.js, WebGL2 first | Flat skinned meshes, cameras, materials, and shadows |
-| Triangulation | Earcut | Triangulation of validated contours |
-| PSD | ag-psd, optional | Layers within the library's supported scope; layered PNG is preferred |
-| Schema | Zod + generated JSON Schema | One contract source for UI/service/MCP |
-| MCP | Official TypeScript SDK | Adapter for Codex and Antigravity |
-| Local service | Node.js + TypeScript | Project state, command bus, files, and jobs |
-| Desktop | Tauri + Rust | Windows/Linux and process lifecycle |
-| Film export | Shared renderer + native FFmpeg | Correctly timed frames, video, and audio |
-| Image-generation source | Image-generation tool integrated into Codex/Antigravity | AI creates images and passes the results into the app through MCP |
+| P0. Contracts and baseline | Actual UI inventory, entity/timebase/migration contracts, service authority, save/recovery, interactive five-workspace mockup | Shared contracts settled; no split state/false success; existing projects can open/migrate |
+| P1. Filmmaking vertical slice | Minimal raster Draw → cel/rigid clip → multiplane/camera Compose → Edit with 3 cuts + audio/subtitles → short export | User completes and reopens a 15-second film through UI; MCP controls the same data |
+| P2. Asset studio | Brush/selection/mask/exposure per spec; manual/automatic mesh/holes/UV; skeleton/weights/test poses; clip keys/curves | UX-01/02/03; deformation fixtures, stroke undo and replace-source/rebind pass |
+| P3. Composition and editing | Instance reuse, clip timing, camera paths, light/shadow, shot trim/split/ripple, complete basic audio/subtitle editing | UX-04/05/06; source/instance scope, cuts and A/V sync are correct |
+| P4. AI director and recovery | Script → assets → shots → real preview → revision → export; jobs, reconnect, conflict, import handoff | UX-07; AI/UI share revisions, retries do not duplicate, no false completion |
+| P5. Production quality | Render presets, cache/readback, DPI/keyboard/stylus, autosave, Windows/Linux packaging | UX-08/09/10; real video/benchmarks, queue/cancel/recovery pass |
 
-Three.js provides skinning and materials with normal-map support. Earcut/ag-psd
-reduce the amount of processing that must be implemented. The rig editor, warp,
-view sets, and timeline still need to be built. Earcut only handles triangulation;
-contour extraction, adding vertices around joints, and deformation topology require
-separate logic. [Skinning][skinning], [material][material], [Earcut][earcut],
-[ag-psd][psd].
+P1 is a small complete workflow; it does not require every brush/effect at its
+final level. MCP and deterministic export start in P0/P1 and expand thereafter;
+do not discover separate editor/AI business logic only in P4/P5.
+Each milestone includes a vertical slice, behavior checks and a demo project;
+implementing many empty panels is not UI completion.
 
-TypeScript owns the main logic so UI, MCP, and renderer can share it directly. Rust
-does not keep a second rig/timeline implementation. Move a hot path to Rust/WASM
-only when measurements show a benefit; retain one implementation source and
-compatibility tests. Do not add a local model, ComfyUI, a Python service, or a
-separate image-generation API key to the default workflow.
+[Testing Strategy](TESTING_STRATEGY.md) owns the test matrix. Acceptance requires a
+reopenable project, workflow video/screenshots, decoded/probed output when rendering,
+machine configuration and measurements. Isolated tests or module names do not
+replace this evidence.
 
-The foundational libraries can be used free of charge: Three.js uses MIT and Earcut
-uses ISC. Live2D/Spine runtimes are not included in the core because they have
-separate terms. [Three.js license][three-license], [Earcut][earcut],
-[Spine runtime license][spine-license].
+## 8. Code rules and AI team
 
-Do not combine PixiJS and Three.js in the first release. Use one renderer to reduce
-the cost of synchronizing poses, materials, picking, and shadows. Evaluate WebGPU
-after WebGL2.
+[Coding Rules](CODING_RULES.md), [Module Map](MODULE_MAP.md) and
+[AI Team Protocol](AI_TEAM_PROTOCOL.md) remain applicable: at most 800 physical
+lines per source file, no compressed-code workaround, descriptive names and
+responsibility-based decomposition. Each business rule has one owner; search
+existing ownership before creating another helper/service.
 
-## 4. Camera and shadows for 2.5D
+The lead settles contracts and assigns one writer per file; parallelize only
+independent scope. UI, graphics, application/MCP, desktop/export and QA share
+workflow acceptance criteria. Translate docs_vi into docs with every requirement
+change. A request to review/edit plans alone does not authorize implementation.
 
-- Characters and environments are depth-separated layers; cameras may be
-  orthographic or perspective.
-- A mesh deforms according to the pose before taking part in the shadow pass.
-- Shadows follow image alpha, the deformed silhouette, and light direction; they
-  must not be rectangles.
-- Shadow-receiving floors/walls are simple planes supplied by the app; the user does
-  not need to create 3D models.
-- Light-driven silhouette shadows and artistic soft shadows are two explicitly
-  named modes.
-- Switching views must switch the corresponding shadow and avoid accidentally
-  producing two shadows.
-- A flat card does not have complete volume, so shadows have limitations at edge-on
-  and rear angles. A simple shadow proxy may be added after the film style has been
-  validated.
+## 9. Deferred scope and next step
 
-## 5. AI/MCP and shared data
+Defer full vector editing, a brush engine at the breadth of mature dedicated
+painting software, 3D/GLB model authoring, cloth/fluid, advanced automatic lip-sync,
+advanced motion blur/DOF, cloud collaboration/render and headless export.
+Voice generation has no default provider; the first version accepts audio files.
+Do not promise automatic rigging for every silhouette or all views from one image.
 
-```mermaid
-flowchart TD
-  A[Codex / Antigravity] --> B[MCP adapter]
-  U[Editor UI] --> C[Application service]
-  B --> C
-  C --> D[Command bus and project state]
-  D --> E[Core: asset, rig, view set, animation]
-  D --> F[Project store and history]
-  D --> G[Shared renderer]
-  G --> U
-  G --> H[Frame → FFmpeg → video]
-```
-
-Domain tools cover reading projects/assets; importing layers; creating meshes;
-creating/editing rigs; testing poses; adding views/expressions; adding clips/shots;
-configuring cameras/lights; rendering previews; exporting films; and reading or
-cancelling jobs. UI and MCP call the same application service.
-
-AI changes assets/scenes through data; it does not edit the app's source code every
-time it makes a film. Commands have schemas, revisions, IDs, and readable state.
-Batches are atomic; retries do not duplicate assets/jobs; undo/redo use the same
-command bus.
-
-The default asset-creation workflow is:
-
-1. The agent reads requirements/style/references and creates a standard brief from
-   an app tool.
-2. Codex/Antigravity invokes the client's own image-generation or image-editing tool.
-3. The agent passes the real image into the app through an MCP asset-import tool;
-   the app validates the data and stores the source.
-4. Normalize layers/views, create the mesh and rig, test poses, and make corrections
-   through the same command bus.
-
-The MCP server cannot call every AI client's internal tools by itself. The agent
-coordinates both tool groups within one task; when image generation is unavailable
-or the file cannot be transferred, it reports the real state. The workflow begins
-from a request in Codex/Antigravity; an image-generation button in the UI must not
-pretend it has launched an external agent. Users do not need to configure another
-image model/API inside the app.
-[Workflow, file transfer, and acceptance details](IMAGE_WORKFLOW.md).
-
-The project stores a versioned manifest, asset sources, views, rigs, materials, and
-clips. Texture atlases/thumbnails are rebuildable caches; scene instances reference
-asset IDs. Finalize the detailed schema in Milestone 0 to avoid locking the format
-before experimentation.
-[Detailed schema and project structure](PROJECT_FORMAT.md).
-[Command bus and undo/redo architecture](COMMAND_BUS.md).
-[MCP tool catalog](MCP_TOOLS.md).
-[UI design and icon system](UI_SPECIFICATION.md).
-
-## 6. Preview and export
-
-- Use the same pose evaluator at `frameIndex / fps`.
-- Timeline FPS, preview FPS, and exported video FPS are three separate settings.
-  Export supports 24/30/60/120 FPS, including 2K DCI, QHD 1440p, 4K UHD, and
-  4K DCI.
-- Sample every exported frame at its target time; do not merely change metadata or
-  duplicate 60 FPS frames and call the result a 120 FPS render.
-- Contract order: select view → warp/morph in rest space → bone skinning → instance
-  transform → camera/shadow/render. This order must be tested.
-  [Deformation pipeline details](DEFORMATION_PIPELINE.md).
-- The renderer sends frames through a bounded-buffer pipeline to FFmpeg; expose job
-  progress, errors, and cancellation. Each job is tied to a revision snapshot.
-- Prefer H.264/HEVC through NVENC when the driver and FFmpeg build support it. Probe
-  the real encoder and provide an explicit CPU fallback; do not silently reduce
-  resolution or FPS when encoding is slow.
-- The first release requires the app to remain open so the renderer can receive
-  jobs. MCP returns `waiting_renderer` when no renderer is available; it must not
-  falsely report that rendering is running or complete.
-- Headless operation while the app is closed is a later extension after the basic
-  pipeline.
-- The browser uses the same editor but must check environment codec/file support;
-  do not promise native capabilities on the web when the local service is absent.
-
-4K/120 FPS is an output-quality requirement; it does not mean every scene must
-preview or render faster than real time. Offline frame-by-frame rendering still
-preserves the exact FPS. Presets, memory budgets, and the acceptance matrix are in
-[RENDER_PROFILES.md](RENDER_PROFILES.md).
-
-## 7. Implementation milestones and acceptance
-
-| Milestone | Content | Acceptance condition |
-| --- | --- | --- |
-| 0. Standardization | Format the draft, split modules, consolidate genuinely shared logic, enable gates | Modified source is readable, no file exceeds 800 lines, and work does not continue in files that accumulate business concerns |
-| 1. Image → 2.5D pipeline | AI creates an image with a client tool → MCP imports it → mesh/rig → camera/shadow | A real image produces a 5–10 second clip with correct deformation and alpha/light shadows, and the project reopens |
-| 2. Rig and multiple views | Bones/pivots/weights, rest pose, warp, expressions, view set | View changes stay within asset capabilities without pivot jumps or invalid topology blending |
-| 3. Filmmaking app | Library, timeline, clip blending, shots, cameras/lights | Build a short film from reusable assets; save/open/undo work correctly |
-| 4. AI director | Script → shots → assets/actions → preview → corrections → export | MCP builds a multi-shot film from existing assets and reports missing data |
-| 5. Asset-set quality | Generate/edit multiple views with client tools, layers, expressions, and rig | The view set is consistent, has true alpha, and remains editable; no local model installation is required |
-| 6. Packaging/optimization | Windows/Linux, NVENC, 2K/4K × 60/120 FPS, cache, and recovery | Correct dimensions/frame count/timestamps with verification video and measurements on each OS |
-
-Benchmarks use the RTX 3060 12 GB as the target GPU. The preview target is 60 FPS,
-with an optional 120 FPS mode for suitable scenes and displays; preview resolution
-may be reduced independently from 4K output. Record CPU, RAM, driver, vertex/bone
-counts, shadow budget, median/p95 frame time, export time, RAM/VRAM, and encoder.
-Do not infer performance from VRAM alone or call offline 4K/120 FPS export a real-time
-4K/120 FPS preview.
-
-Critical tests cover normalized weights; acyclic bones; IK limits; interpolation;
-view/topology transitions; masks/shadows following the pose; preview/export using
-the same time; UI/MCP sharing state; atomic save and undo; imported images being
-real tool output; and 60/120 FPS output having the correct frame count/timestamps
-without silent quality reduction.
-[Testing strategy](TESTING_STRATEGY.md).
-
-## 8. Code and AI rules
-
-Details: [CODING_RULES.md](CODING_RULES.md), [MODULE_MAP.md](MODULE_MAP.md).
-The user-requested code rules apply independently of architecture approval.
-
-- Maximum 800 physical lines per source file, including comments and blank lines.
-- Around 400–500 lines is a signal to split responsibilities, not a target size.
-- Do not compress code/JSX/types to evade the limit; present each business step
-  clearly.
-- Each business rule/algorithm has one owner; callers import it or use an adapter.
-- Shared helpers are divided by domain, not collected in `utils.ts` or `shared.ts`.
-- Names describe meaning; types are separated clearly; imports, public APIs, and
-  helpers have a readable layout.
-- AI guidance works together with formatter, lint, source limits, duplicate checks,
-  and dependency-graph checks; documentation alone does not enforce compliance.
-
-Codex reads `AGENTS.md`. Codex/Antigravity use
-`.agents/skills/<name>/SKILL.md`; Antigravity has workspace rules in
-`.agents/rules`. Client adapters point back to the shared rule source.
-[Codex rules][codex-rules], [skills][codex-skills],
-[Antigravity rules][anti-rules], [skills][anti-skills].
-
-Large tasks may be divided among specialists with independent scopes. The Lead
-finalizes contracts, assigns one write owner per file, integrates results, and runs
-the final checks; it does not invoke every role for a small task. Details are in the
-[AI team protocol](AI_TEAM_PROTOCOL.md).
-
-## 9. Current scope
-
-The first release excludes Blender/Godot, a GLB editor, 3D model authoring,
-cloth/fluid simulation, advanced lip-sync, multi-user collaboration, and cloud
-rendering. Basic audio multiplexing follows the video pipeline; voice generation
-requires a provider or a user-supplied file.
-
-The code in `src/`, `shared/`, and `engine/` is still an incomplete draft, has not
-been built/tested, and contains compressed code. Do not use it as a quality example.
-Milestone 0 will standardize the applicable parts when the user requests
-implementation. This turn does not refactor the app or install dependencies.
-
-[live2d]: https://docs.live2d.com/en/cubism-editor-manual/deformer/
-[spine-weights]: https://esotericsoftware.com/spine-weights
-[skinning]: https://threejs.org/docs/pages/SkinnedMesh.html
-[material]: https://threejs.org/docs/pages/MeshStandardMaterial.html
-[earcut]: https://github.com/mapbox/earcut
-[psd]: https://github.com/Agamnentzar/ag-psd
-[three-license]: https://github.com/mrdoob/three.js/blob/dev/LICENSE
-[spine-license]: https://esotericsoftware.com/licenses/Spine-Runtimes-License-Agreement.pdf
-[codex-rules]: https://learn.chatgpt.com/docs/agent-configuration/agents-md
-[codex-skills]: https://learn.chatgpt.com/docs/build-skills
-[anti-rules]: https://antigravity.google/docs/rules-workflows
-[anti-skills]: https://antigravity.google/docs/skills
+The next implementation step is P0 and an interactive Draw/Compose/Edit mockup
+with sample assets, followed by P1 using real data. New architecture changes are
+proposed in [Architecture Decisions](ARCHITECTURE_DECISIONS.md); source implementation
+starts when the user assigns that work.

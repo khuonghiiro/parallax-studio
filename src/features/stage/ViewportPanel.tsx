@@ -11,21 +11,26 @@ import { Button } from '../../ui/Button.js';
 import { useEditor } from '../../app/EditorContext.js';
 import { ViewportController, type OverlaySettings } from './viewport-controller.js';
 import { buildAssetMesh, type BuiltMeshResult } from './mesh-builder.js';
+import { SceneComposer } from './scene-composer.js';
+import { ComposeStagingBar } from './ComposeStagingBar.js';
 import {
   applyWeightBrush,
   computeHeatmapColors,
   type WeightBrushConfig,
 } from './weight-painter.js';
+import type { WorkspaceId } from '../../app/layout/MenuBar.js';
+import { DrawingCanvas } from '../draw/DrawingCanvas.js';
+import { SequenceEditor } from '../edit/SequenceEditor.js';
 import './ViewportPanel.css';
 
 export interface ViewportPanelProps {
-  mode: 'setup' | 'animate';
+  mode: WorkspaceId;
 }
 
 export type ActiveTool = 'select' | 'move' | 'rotate' | 'scale' | 'weight-paint';
 
 /**
- * Central viewport — Three.js canvas + toolbar + overlay toggles.
+ * Central viewport — Three.js canvas + toolbar + overlay toggles + 2.5D stage composer.
  */
 export function ViewportPanel({
   mode,
@@ -33,14 +38,17 @@ export function ViewportPanel({
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const controllerRef = useRef<ViewportController | null>(null);
+  const sceneComposerRef = useRef<SceneComposer | null>(null);
   const currentBuiltRef = useRef<BuiltMeshResult | null>(null);
 
   const {
     snapshot,
+    projectState,
     selectedAssetId,
     setSelectedAssetId,
     selectedBoneId,
-    projectState,
+    selectedInstanceId,
+    setSelectedInstanceId,
     getAssetData,
     setFps,
     currentFrame,
@@ -70,6 +78,7 @@ export function ViewportPanel({
 
   const [cameraMode, setCameraMode] = useState<'orthographic' | 'perspective'>('orthographic');
   const [showShadows, setShowShadows] = useState<boolean>(true);
+  const [showDepthPlanes, setShowDepthPlanes] = useState<boolean>(true);
 
   // Auto-select first asset if none is selected and assets exist
   useEffect(() => {
@@ -84,7 +93,11 @@ export function ViewportPanel({
   const asset = selectedAssetId ? getAssetData(selectedAssetId) : undefined;
   const activeViewAngle = (asset?.viewSet?.activeView ?? 'front') as ViewAngle;
 
-  // Initialize Three.js viewport controller
+  // Active scene and staged instances
+  const activeScene = projectState.getAllSceneData()[0];
+  const instances = activeScene?.instances || [];
+
+  // Initialize Three.js viewport controller & scene composer
   useEffect(() => {
     if (!canvasRef.current) return;
 
@@ -93,20 +106,64 @@ export function ViewportPanel({
       onFpsUpdate: (fps) => setFps(fps),
     });
     controllerRef.current = controller;
+    sceneComposerRef.current = new SceneComposer(controller.getScene());
 
     return () => {
+      sceneComposerRef.current?.dispose();
+      sceneComposerRef.current = null;
       controller.dispose();
       controllerRef.current = null;
     };
   }, [setFps]);
 
-  // Sync overlays to controller
+  // Sync camera mode & overlays to controller
+  useEffect(() => {
+    controllerRef.current?.setCameraMode(cameraMode);
+  }, [cameraMode]);
+
+  useEffect(() => {
+    controllerRef.current?.setShowShadows(showShadows);
+  }, [showShadows]);
+
+  useEffect(() => {
+    controllerRef.current?.setStagePlanesVisible(mode === 'compose' && showDepthPlanes);
+  }, [mode, showDepthPlanes]);
+
   useEffect(() => {
     controllerRef.current?.setOverlays(overlays);
   }, [overlays]);
 
-  // Load and display selected asset mesh
+  // Synchronize SceneComposer in compose mode
   useEffect(() => {
+    if (mode !== 'compose' || !controllerRef.current || !sceneComposerRef.current) return;
+
+    const currentScene = projectState.getAllSceneData()[0];
+    const sceneInstances = currentScene?.instances || [];
+
+    sceneComposerRef.current.updateScene(
+      sceneInstances,
+      getAssetData,
+      currentScene?.lights || [],
+      0,
+      { x: 0, y: 0 },
+    );
+
+    if (!selectedInstanceId && sceneInstances.length > 0) {
+      setSelectedInstanceId(sceneInstances[0]!.id);
+    }
+  }, [mode, projectState, snapshot, getAssetData, selectedInstanceId]);
+
+  // Load and display single selected asset mesh (for rig, animate, edit modes)
+  useEffect(() => {
+    if (mode === 'compose') {
+      if (controllerRef.current) {
+        controllerRef.current.clearContent();
+        controllerRef.current.clearOverlays();
+        currentBuiltRef.current = null;
+      }
+      return;
+    }
+
     if (!selectedAssetId || !controllerRef.current) {
       if (!selectedAssetId && controllerRef.current) {
         controllerRef.current.clearContent();
@@ -138,15 +195,22 @@ export function ViewportPanel({
     return () => {
       isCancelled = true;
     };
-  }, [selectedAssetId, snapshot, getAssetData]);
+  }, [selectedAssetId, mode, snapshot, getAssetData]);
 
   // Playback & deformation animation loop
   useEffect(() => {
+    if (mode === 'compose') {
+      const currentScene = projectState.getAllSceneData()[0];
+      const sceneInstances = currentScene?.instances || [];
+      sceneComposerRef.current?.animateInstances(currentFrame, sceneInstances);
+      return;
+    }
+
     const built = currentBuiltRef.current;
     if (!built?.skeleton) return;
 
     if (built.skeletonHelper) {
-      built.skeletonHelper.visible = mode === 'setup' && !isPlaying;
+      built.skeletonHelper.visible = (mode === 'rig' || mode === 'draw') && !isPlaying;
     }
 
     // Evaluate procedural or keyframed pose for preview
@@ -365,6 +429,40 @@ export function ViewportPanel({
     setOverlaysState((prev) => ({ ...prev, showSkeleton: !prev.showSkeleton }));
   }, []);
 
+  const handleStageAsset = useCallback(async () => {
+    if (!selectedAssetId) return;
+    const currentAsset = getAssetData(selectedAssetId);
+    const result = await dispatch({
+      type: 'add_instance',
+      domain: 'scene',
+      data: {
+        assetId: selectedAssetId,
+        name: `${currentAsset?.name || 'Character'}`,
+        position: { x: 0, y: 0 },
+        depth: 0,
+        scale: 1,
+        rotation: 0,
+      },
+    });
+    if (result.status === 'success' && result.entityId) {
+      setSelectedInstanceId(result.entityId);
+    }
+  }, [selectedAssetId, getAssetData, dispatch]);
+
+  const handleUpdateInstanceDepth = useCallback(
+    async (instId: string, depth: number) => {
+      await dispatch({
+        type: 'update_instance',
+        domain: 'scene',
+        data: {
+          instanceId: instId,
+          updates: { depth },
+        },
+      });
+    },
+    [dispatch],
+  );
+
   const handleFileInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -376,6 +474,14 @@ export function ViewportPanel({
   );
 
   const hasAssets = Boolean(snapshot && Object.keys(snapshot.manifest.assets).length > 0);
+
+  if (mode === 'draw') {
+    return <DrawingCanvas />;
+  }
+
+  if (mode === 'edit') {
+    return <SequenceEditor />;
+  }
 
   return (
     <div className="viewport">
@@ -411,7 +517,7 @@ export function ViewportPanel({
             title="Scale (S)" active={activeTool === 'scale'}
             onClick={() => setActiveTool('scale')}
           />
-          {mode === 'setup' && (
+          {mode === 'rig' && (
             <Button
               icon={Paintbrush} iconOnly size="sm" variant="ghost"
               title="Weight Paint Brush"
@@ -422,7 +528,7 @@ export function ViewportPanel({
               }}
             />
           )}
-          {mode === 'setup' && activeTool === 'weight-paint' && (
+          {mode === 'rig' && activeTool === 'weight-paint' && (
             <div
               style={{
                 display: 'flex',
@@ -452,7 +558,7 @@ export function ViewportPanel({
           )}
         </ToolGroup>
 
-        {mode === 'setup' && (
+        {mode === 'rig' && (
           <ToolGroup label="View Angles">
             <div style={{ display: 'flex', gap: 2 }}>
               {(['front', 'quarter-left', 'quarter-right', 'side-left', 'back'] as const).map((angle) => {
@@ -478,7 +584,7 @@ export function ViewportPanel({
           </ToolGroup>
         )}
 
-        {mode === 'setup' && (
+        {mode === 'rig' && (
           <ToolGroup label="Setup">
             <Button
               icon={Pentagon} iconOnly size="sm" variant="ghost"
@@ -581,6 +687,28 @@ export function ViewportPanel({
               </Button>
             </div>
           </div>
+        )}
+
+        {mode === 'compose' && (
+          <ComposeStagingBar
+            instances={instances}
+            selectedInstanceId={selectedInstanceId}
+            onSelectInstance={setSelectedInstanceId}
+            onStageAsset={handleStageAsset}
+            canStageAsset={Boolean(selectedAssetId && asset)}
+            selectedAssetName={asset?.name}
+            cameraMode={cameraMode}
+            onToggleCameraMode={() =>
+              setCameraMode((prev) => (prev === 'perspective' ? 'orthographic' : 'perspective'))
+            }
+            onSetOrbitView={() => controllerRef.current?.setOrbitAngle(30, 15)}
+            onResetFrontView={() => controllerRef.current?.resetView()}
+            showDepthPlanes={showDepthPlanes}
+            onToggleDepthPlanes={() => setShowDepthPlanes((prev) => !prev)}
+            showShadows={showShadows}
+            onToggleShadows={() => setShowShadows((prev) => !prev)}
+            onUpdateInstanceDepth={handleUpdateInstanceDepth}
+          />
         )}
       </div>
     </div>

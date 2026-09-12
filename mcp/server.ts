@@ -31,6 +31,7 @@ import {
 
 export interface McpServerOptions {
   service?: ApplicationService;
+  remoteUrl?: string;
   autoStartHttp?: boolean;
   port?: number;
 }
@@ -48,19 +49,15 @@ export function createMcpServer(options: McpServerOptions = {}): {
   const service = options.service ?? getApplicationService();
   const bus = service.commandBus;
   const state = service.projectState;
+  const remoteUrl = options.remoteUrl ?? process.env.PARALLAX_REMOTE_URL;
 
-  // Register remote-relay middleware: forwards state-mutating commands to running web app
-  bus.use(async (payload, next) => {
-    if (payload.data?.__skipRemote) {
-      return next();
-    }
-
-    const candidateUrls = ['http://127.0.0.1:5173/api', 'http://127.0.0.1:3100/api'];
-    for (const baseUrl of candidateUrls) {
+  // When remoteUrl is explicitly configured, relay commands to remote app without dual-execution or local fallback
+  if (remoteUrl) {
+    bus.use(async (payload) => {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 350);
-        const res = await fetch(`${baseUrl}/commands`, {
+        const timeout = setTimeout(() => controller.abort(), 2000);
+        const res = await fetch(`${remoteUrl}/commands`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -68,25 +65,28 @@ export function createMcpServer(options: McpServerOptions = {}): {
         });
         clearTimeout(timeout);
         if (res.ok) {
-          const remoteResult = (await res.json()) as CommandResult;
-          payload.data = { ...payload.data, __skipRemote: true };
-          await next();
-          return remoteResult;
+          return (await res.json()) as CommandResult;
         }
-      } catch {
-        // Fallback
+        const errorText = await res.text().catch(() => '');
+        return {
+          status: 'error',
+          error: `Remote relay error (${res.status}): ${errorText || res.statusText}`,
+        };
+      } catch (err) {
+        return {
+          status: 'error',
+          error: `Remote relay unreachable at ${remoteUrl}: ${(err as Error).message}`,
+        };
       }
-    }
-    return next();
-  });
+    });
+  }
 
   async function getActiveSnapshot(): Promise<ProjectSnapshot | null> {
-    const candidateUrls = ['http://127.0.0.1:5173/api', 'http://127.0.0.1:3100/api'];
-    for (const baseUrl of candidateUrls) {
+    if (remoteUrl) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 350);
-        const res = await fetch(`${baseUrl}/state`, { signal: controller.signal });
+        const timeout = setTimeout(() => controller.abort(), 2000);
+        const res = await fetch(`${remoteUrl}/state`, { signal: controller.signal });
         clearTimeout(timeout);
         if (res.ok) {
           const body = (await res.json()) as { status: string; snapshot: SerializableSnapshot };
@@ -95,11 +95,12 @@ export function createMcpServer(options: McpServerOptions = {}): {
           }
         }
       } catch {}
+      return null;
     }
     return state.getSnapshot();
   }
 
-  if (options.autoStartHttp !== false) {
+  if (options.autoStartHttp === true) {
     startApplicationService({
       port: options.port ?? 3100,
       service,
@@ -602,7 +603,7 @@ export function createMcpServer(options: McpServerOptions = {}): {
 }
 
 async function run(): Promise<void> {
-  const { server } = createMcpServer();
+  const { server } = createMcpServer({ autoStartHttp: true });
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

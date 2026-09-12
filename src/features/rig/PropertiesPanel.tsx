@@ -23,6 +23,8 @@ export function PropertiesPanel({
     snapshot,
     selectedAssetId,
     selectedBoneId,
+    selectedInstanceId,
+    selectedShotId,
     projectState,
     currentFrame,
     dispatch,
@@ -41,6 +43,13 @@ export function PropertiesPanel({
     ? (snapshot?.assets.get(selectedAssetId) ?? projectState.getAssetData(selectedAssetId))
     : undefined;
   const bone = asset?.skeleton?.bones.find((b) => b.id === selectedBoneId);
+  const activeScene = projectState.getAllSceneData()[0];
+  const activeInstance = selectedInstanceId
+    ? activeScene?.instances.find((i) => i.id === selectedInstanceId)
+    : (activeScene?.instances.find((i) => i.assetId === selectedAssetId) || activeScene?.instances[0]);
+  const activeShot = selectedShotId
+    ? activeScene?.shots?.find((s) => s.id === selectedShotId)
+    : activeScene?.shots?.[0];
 
   const handleMorphChange = async (name: string, value: number) => {
     if (!selectedAssetId) return;
@@ -233,6 +242,121 @@ export function PropertiesPanel({
             />
           </div>
         </Panel>
+      )}
+
+      {/* Stage & Camera Section — Compose Workspace */}
+      {mode === 'compose' && (
+        <>
+          <Panel title="Stage & Camera Staging" id="panel-compose-settings">
+            <div className="props-grid">
+              <Input label="Active Scene" value="Scene 1 (2.5D Multiplane)" readOnly />
+              <Input label="Camera Projection" value="Perspective 45°" readOnly />
+              <Input label="Camera Z-Distance" value="1400 px" readOnly />
+              <Input label="Depth Planes" value="3 (Fore, Mid, Back)" readOnly />
+              <Slider label="Parallax Depth Strength" min={0} max={100} value={80} onChange={() => {}} unit="%" />
+            </div>
+          </Panel>
+
+          {activeInstance && (
+            <Panel title={`Instance: ${activeInstance.name}`} id="panel-instance-props">
+              <div className="props-grid">
+                <Input label="Instance ID" value={activeInstance.id} readOnly />
+                <Slider
+                  label="Z-Depth Layer"
+                  min={-300}
+                  max={300}
+                  value={activeInstance.depth}
+                  onChange={async (val) => {
+                    await dispatch({
+                      type: 'update_instance',
+                      domain: 'scene',
+                      data: {
+                        instanceId: activeInstance.id,
+                        updates: { depth: val },
+                      },
+                    });
+                  }}
+                  unit="px"
+                />
+                <Input
+                  label="Pos X"
+                  value={Math.round(activeInstance.position.x)}
+                  type="number"
+                  readOnly
+                  unit="px"
+                />
+                <Input
+                  label="Pos Y"
+                  value={Math.round(activeInstance.position.y)}
+                  type="number"
+                  readOnly
+                  unit="px"
+                />
+                <Input
+                  label="Scale"
+                  value={activeInstance.scale.toFixed(2)}
+                  type="number"
+                  readOnly
+                />
+                <Input
+                  label="Active Clip"
+                  value={activeInstance.activeClipId || 'idle'}
+                  readOnly
+                />
+              </div>
+            </Panel>
+          )}
+        </>
+      )}
+
+      {/* Render & Export Section — Edit Workspace */}
+      {mode === 'edit' && (
+        <>
+          <Panel title="Sequence & Render Profile" id="panel-export-settings">
+            <div className="props-grid">
+              <Input label="Sequence" value="Master Sequence" readOnly />
+              <Select
+                label="Export Profile"
+                value="4k-uhd-60"
+                onChange={() => {}}
+                options={[
+                  { value: '4k-uhd-60', label: '4K UHD (3840×2160, 60fps)' },
+                  { value: '1080p-cine-24', label: '1080p Cinema (1920×1080, 24fps)' },
+                  { value: '1080p-web-30', label: '1080p Web (1920×1080, 30fps)' },
+                  { value: '720p-preview', label: '720p Preview (1280×720, 24fps)' },
+                ]}
+              />
+              <Input label="Video Codec" value="VP9 / WebM (Hardware Accel)" readOnly />
+              <Input label="Output Duration" value="5.0s (120 frames)" readOnly />
+            </div>
+          </Panel>
+
+          {activeShot && (
+            <Panel title={`Shot: ${activeShot.name}`} id="panel-shot-props">
+              <div className="props-grid">
+                <Input label="Shot ID" value={activeShot.id} readOnly />
+                <Input label="Start Frame" value={activeShot.startFrame} type="number" readOnly />
+                <Input label="End Frame" value={activeShot.endFrame} type="number" readOnly />
+                <Input
+                  label="Duration"
+                  value={
+                    `${activeShot.endFrame - activeShot.startFrame}f ` +
+                    `(${((activeShot.endFrame - activeShot.startFrame) / 24).toFixed(1)}s)`
+                  }
+                  readOnly
+                />
+                <Input label="Transition In" value={activeShot.transitionIn || 'cut'} readOnly />
+                <Input
+                  label="Transition Duration"
+                  value={activeShot.transitionDuration || 0}
+                  type="number"
+                  readOnly
+                  unit="f"
+                />
+              </div>
+            </Panel>
+          )}
+        </>
       )}
 
       {/* Material Section */}
