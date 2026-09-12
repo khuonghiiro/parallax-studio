@@ -109,8 +109,11 @@ export function ViewportPanel({
   const activeScene = projectState.getAllSceneData()[0];
   const instances = activeScene?.instances || [];
 
+  const [controllerEpoch, setControllerEpoch] = useState<number>(0);
+
   // Initialize Three.js viewport controller & scene composer
   useEffect(() => {
+    if (mode === 'draw' || mode === 'edit') return;
     if (!canvasRef.current) return;
 
     const controller = new ViewportController({
@@ -119,6 +122,7 @@ export function ViewportPanel({
     });
     controllerRef.current = controller;
     sceneComposerRef.current = new SceneComposer(controller.getScene());
+    setControllerEpoch((c) => c + 1);
 
     return () => {
       sceneComposerRef.current?.dispose();
@@ -126,24 +130,24 @@ export function ViewportPanel({
       controller.dispose();
       controllerRef.current = null;
     };
-  }, [setFps]);
+  }, [setFps, mode]);
 
   // Sync camera mode & overlays to controller
   useEffect(() => {
     controllerRef.current?.setCameraMode(cameraMode);
-  }, [cameraMode]);
+  }, [cameraMode, controllerEpoch]);
 
   useEffect(() => {
     controllerRef.current?.setShowShadows(showShadows);
-  }, [showShadows]);
+  }, [showShadows, controllerEpoch]);
 
   useEffect(() => {
     controllerRef.current?.setStagePlanesVisible(mode === 'compose' && showDepthPlanes);
-  }, [mode, showDepthPlanes]);
+  }, [mode, showDepthPlanes, controllerEpoch]);
 
   useEffect(() => {
     controllerRef.current?.setOverlays(overlays);
-  }, [overlays]);
+  }, [overlays, controllerEpoch]);
 
   // Synchronize SceneComposer in compose mode
   useEffect(() => {
@@ -163,11 +167,11 @@ export function ViewportPanel({
     if (!selectedInstanceId && sceneInstances.length > 0) {
       setSelectedInstanceId(sceneInstances[0]!.id);
     }
-  }, [mode, projectState, snapshot, getAssetData, selectedInstanceId]);
+  }, [mode, projectState, snapshot, getAssetData, selectedInstanceId, controllerEpoch]);
 
   // Load and display single selected asset mesh (for rig, animate, edit modes)
   useEffect(() => {
-    if (mode === 'compose') {
+    if (mode === 'compose' || mode === 'draw' || mode === 'edit') {
       if (controllerRef.current) {
         controllerRef.current.clearContent();
         controllerRef.current.clearOverlays();
@@ -207,7 +211,7 @@ export function ViewportPanel({
     return () => {
       isCancelled = true;
     };
-  }, [selectedAssetId, mode, snapshot, getAssetData]);
+  }, [selectedAssetId, mode, snapshot, getAssetData, controllerEpoch]);
 
   // Playback & deformation animation loop
   useEffect(() => {

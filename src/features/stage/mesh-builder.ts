@@ -56,6 +56,8 @@ export function buildAssetMesh(asset: AssetData): Promise<BuiltMeshResult> {
             skinWeightData,
           );
           const skeletonHelper = new THREE.SkeletonHelper(skinnedMesh);
+          (skeletonHelper.material as THREE.LineBasicMaterial).depthTest = false;
+          skeletonHelper.renderOrder = 999;
 
           resolve({
             mesh: skinnedMesh,
@@ -94,6 +96,8 @@ export function buildAssetMesh(asset: AssetData): Promise<BuiltMeshResult> {
             skinWeightData,
           );
           const skeletonHelper = new THREE.SkeletonHelper(skinnedMesh);
+          (skeletonHelper.material as THREE.LineBasicMaterial).depthTest = false;
+          skeletonHelper.renderOrder = 999;
           resolve({
             mesh: skinnedMesh,
             skeleton,

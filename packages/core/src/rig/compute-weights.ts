@@ -25,6 +25,26 @@ export function computeAutoWeights(
   const vertexCount = vertices.length / 2;
   const weights: VertexWeight[] = [];
 
+  let shoulderX = 100;
+  let neckY = 150;
+  let rootY = 0;
+
+  for (const b of hierarchy.bones) {
+    const name = b.name.toLowerCase();
+    if (name.includes('upper_arm_l') || name.includes('shoulder_l')) {
+      const sx = Math.abs(b.head.x);
+      if (sx > 10) shoulderX = sx;
+    }
+    if (name.includes('neck')) {
+      neckY = b.head.y;
+    }
+    if (name === 'root') {
+      rootY = b.head.y;
+    }
+  }
+
+  const torsoHalfWidth = shoulderX * 0.85;
+
   for (let vi = 0; vi < vertexCount; vi++) {
     const vx = vertices[vi * 2]!;
     const vy = vertices[vi * 2 + 1]!;
@@ -42,8 +62,8 @@ export function computeAutoWeights(
         d *= 1000;
       }
 
-      // 2. Head & Helmet zone (y > 330)
-      if (point.y > 330) {
+      // 2. Head & Neck zone
+      if (point.y >= neckY - 10) {
         if (bName.includes('head') || bName.includes('neck')) {
           d *= 0.9;
         } else {
@@ -51,9 +71,8 @@ export function computeAutoWeights(
         }
       }
 
-      // 3. Torso Core Zone (|x| <= 135, y >= -40 && y <= 330)
-      // Protect chestplate, abdomen, and belt from being pulled by arms or legs
-      if (Math.abs(point.x) <= 135 && point.y >= -40 && point.y <= 330) {
+      // 3. Torso Core Zone (strictly between root and neck within shoulder span)
+      if (Math.abs(point.x) <= torsoHalfWidth && point.y >= rootY - 15 && point.y < neckY) {
         if (bName === 'spine' || bName === 'root') {
           d *= 0.9;
         } else {
@@ -61,9 +80,8 @@ export function computeAutoWeights(
         }
       }
 
-      // 4. Arms & Hands Zone (|x| >= 100, y >= -250 && y <= 340)
-      // Hands hang at y in [-200, 0]. They MUST bind to arm/hand bones, NOT legs!
-      if (Math.abs(point.x) >= 100 && point.y >= -250 && point.y <= 340) {
+      // 4. Arms & Hands Zone (outside torso span, below neck)
+      if (Math.abs(point.x) > torsoHalfWidth && point.y < neckY && point.y >= rootY - (neckY - rootY)) {
         if (bName.includes('arm') || bName.includes('hand')) {
           d *= 0.8;
         } else if (bName.includes('thigh') || bName.includes('shin') || bName.includes('foot')) {
@@ -71,9 +89,8 @@ export function computeAutoWeights(
         }
       }
 
-      // 5. Legs & Boots Zone (y < -40, |x| <= 175)
-      // Legs MUST NOT be pulled by arms, hands, head, or neck
-      if (point.y < -40 && Math.abs(point.x) <= 175) {
+      // 5. Legs & Boots Zone (below root, centered)
+      if (point.y < rootY && Math.abs(point.x) <= shoulderX * 1.5) {
         if (bName.includes('thigh') || bName.includes('shin') || bName.includes('foot') || bName === 'root') {
           d *= 0.9;
         } else if (bName.includes('arm') || bName.includes('hand') || bName.includes('head')) {
@@ -81,9 +98,8 @@ export function computeAutoWeights(
         }
       }
 
-      // 6. Cape (Outer background zones: |x| > 180 and y < 200)
-      // Cape hangs from shoulders/torso, should NOT be torn apart by arm/leg joints
-      if (Math.abs(point.x) > 180 && point.y < 200) {
+      // 6. Cape (Outer background zones)
+      if (Math.abs(point.x) > shoulderX * 1.8 && point.y < neckY) {
         if (bName.includes('forearm') || bName.includes('hand') || bName.includes('shin') || bName.includes('foot')) {
           d *= 20;
         }

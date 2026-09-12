@@ -43,20 +43,69 @@ export function handleImportImage(
   if (rawAlpha && rawAlpha.length === width * height) {
     const alphaUint8 = rawAlpha instanceof Uint8Array ? rawAlpha : new Uint8Array(rawAlpha);
     try {
+      let minX = width;
+      let maxX = 0;
+      let minY = height;
+      let maxY = 0;
+      let opaqueCount = 0;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (alphaUint8[y * width + x]! > 10) {
+            opaqueCount++;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
       const contourResult = extractContour(alphaUint8, width, height, 2.0);
-      const centeredOuter = {
-        points: contourResult.outer.points.map((p) => ({
-          x: p.x - width / 2,
-          y: height / 2 - p.y,
-        })),
-      };
-      const centeredHoles = contourResult.holes.map((h) => ({
-        points: h.points.map((p) => ({
-          x: p.x - width / 2,
-          y: height / 2 - p.y,
-        })),
-      }));
-      mesh = triangulateContour(centeredOuter, centeredHoles);
+      let cMinX = width;
+      let cMaxX = 0;
+      let cMinY = height;
+      let cMaxY = 0;
+      for (const pt of contourResult.outer.points) {
+        if (pt.x < cMinX) cMinX = pt.x;
+        if (pt.x > cMaxX) cMaxX = pt.x;
+        if (pt.y < cMinY) cMinY = pt.y;
+        if (pt.y > cMaxY) cMaxY = pt.y;
+      }
+
+      const drawnW = maxX - minX;
+      const contourW = cMaxX - cMinX;
+      const drawnH = maxY - minY;
+      const contourH = cMaxY - cMinY;
+      if (
+        (opaqueCount > 30 && drawnW > 30 && contourW < drawnW * 0.8) ||
+        (opaqueCount > 30 && drawnH > 30 && contourH < drawnH * 0.8)
+      ) {
+        // Disconnected limbs/strokes detected: use full deformable grid
+        mesh = createBoxMesh(width, height);
+      } else {
+        const centeredOuter = {
+          points: contourResult.outer.points.map((p) => ({
+            x: p.x - width / 2,
+            y: height / 2 - p.y,
+          })),
+        };
+        const centeredHoles = contourResult.holes.map((h) => ({
+          points: h.points.map((p) => ({
+            x: p.x - width / 2,
+            y: height / 2 - p.y,
+          })),
+        }));
+        mesh = triangulateContour(centeredOuter, centeredHoles);
+        const correctedUvs: number[] = [];
+        for (let i = 0; i < mesh.vertices.length; i += 2) {
+          const vx = mesh.vertices[i]!;
+          const vy = mesh.vertices[i + 1]!;
+          const u = (vx + width / 2) / width;
+          const v = (vy + height / 2) / height;
+          correctedUvs.push(Math.max(0, Math.min(1, u)), Math.max(0, Math.min(1, v)));
+        }
+        mesh = { ...mesh, uvs: correctedUvs };
+      }
     } catch {
       // Fallback to bounding box if contour extraction fails
       mesh = createBoxMesh(width, height);

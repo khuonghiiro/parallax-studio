@@ -1,31 +1,25 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  Paintbrush,
-  Eraser,
-  Pipette,
-  PaintBucket,
-  RotateCcw,
-  RotateCw,
-  Trash2,
-  Sparkles,
-  ArrowRight,
-  Upload,
-} from 'lucide-react';
-import { Button } from '../../ui/Button.js';
 import { useEditor } from '../../app/EditorContext.js';
-import { floodFill, hexToRgba } from './flood-fill.js';
-import { renderOnionSkin } from './onion-skin.js';
 import { LayerStackPanel, type CanvasLayer } from './LayerStackPanel.js';
 import { CelStrip, type CelItem } from './CelStrip.js';
+import { renderOnionSkin } from './onion-skin.js';
+import { floodFill, hexToRgba } from './flood-fill.js';
+import { DrawingToolbar } from './DrawingToolbar.js';
+import {
+  type Point,
+  type BrushType,
+  type BrushSettings,
+  drawSmoothedSegment,
+} from './stroke-smoother.js';
+import {
+  type ViewportTransform,
+  screenToCanvasCoords,
+  mirrorPoint,
+} from './canvas-navigator.js';
 import './DrawingCanvas.css';
 
 const CANVAS_WIDTH = 600;
 const CANVAS_HEIGHT = 600;
-
-const COLOR_PALETTE = [
-  '#6380ff', '#818cf8', '#ef4444', '#f59e0b',
-  '#10b981', '#06b6d4', '#ec4899', '#ffffff', '#111827',
-];
 
 export type DrawTool = 'brush' | 'eraser' | 'eyedropper' | 'fill';
 
@@ -50,48 +44,73 @@ function createBlankCanvas(w = CANVAS_WIDTH, h = CANVAS_HEIGHT): HTMLCanvasEleme
 export function DrawingCanvas(): React.JSX.Element {
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   const onionCanvasRef = useRef<HTMLCanvasElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
 
   const [tool, setTool] = useState<DrawTool>('brush');
+  const [brushType, setBrushType] = useState<BrushType>('pen');
   const [color, setColor] = useState<string>('#6380ff');
   const [size, setSize] = useState<number>(12);
+  const [symmetry, setSymmetry] = useState<boolean>(false);
+  const [lightTable, setLightTable] = useState<boolean>(false);
+
+  // Zoom and Pan transform
+  const [transform, setTransform] = useState<ViewportTransform>({
+    zoom: 1.0,
+    panX: 0,
+    panY: 0,
+  });
+  const [isPanning, setIsPanning] = useState<boolean>(false);
+  const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Drawing state
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
-  const [lastPoint, setLastPoint] = useState<{ x: number; y: number } | null>(null);
+  const pointsRef = useRef<Point[]>([]);
+
+  const isSpaceDownRef = useRef<boolean>(false);
 
   // Layers stack
   const [layers, setLayers] = useState<CanvasLayer[]>(() => [
     {
-      id: 'layer-lineart',
-      name: 'Line Art',
+      id: 'layer-bg',
+      name: 'Phác thảo (Sketch)',
       visible: true,
-      opacity: 1,
       locked: false,
+      opacity: 1.0,
+      canvas: createBlankCanvas(),
+    },
+    {
+      id: 'layer-ink',
+      name: 'Nét mực (Inking)',
+      visible: true,
+      locked: false,
+      opacity: 1.0,
       canvas: createBlankCanvas(),
     },
   ]);
-  const [activeLayerId, setActiveLayerId] = useState<string>('layer-lineart');
+  const [activeLayerId, setActiveLayerId] = useState<string>('layer-ink');
 
-  // Cel Animation timeline
+  // Cel sequence & Onion Skin
   const [cels, setCels] = useState<CelData[]>([
     { id: 'cel-1', name: 'Cel 1', layersData: {} },
   ]);
   const [activeCelIndex, setActiveCelIndex] = useState<number>(0);
-
-  // Onion skin & loop playback
-  const [showOnionSkin, setShowOnionSkin] = useState<boolean>(false);
+  const [showOnionSkin, setShowOnionSkin] = useState<boolean>(true);
   const [onionOpacity, setOnionOpacity] = useState<number>(0.35);
   const [isPlayingLoop, setIsPlayingLoop] = useState<boolean>(false);
 
-  // Undo / Redo history
+  // Undo / Redo
   const historyRef = useRef<ImageData[]>([]);
   const historyStepRef = useRef<number>(-1);
-  const [canUndo, setCanUndo] = useState<boolean>(false);
-  const [canRedo, setCanRedo] = useState<boolean>(false);
-  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const {
     dispatch,
     selectedAssetId,
     setSelectedAssetId,
+    setSelectedInstanceId,
+    projectState,
     getAssetData,
     setWorkspace,
     setMode,
@@ -110,12 +129,12 @@ export function DrawingCanvas(): React.JSX.Element {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     for (const layer of layers) {
       if (layer.visible && layer.opacity > 0) {
-        ctx.globalAlpha = layer.opacity;
+        ctx.globalAlpha = lightTable && layer.id === 'layer-bg' ? 0.35 : layer.opacity;
         ctx.drawImage(layer.canvas, 0, 0);
       }
     }
     ctx.globalAlpha = 1.0;
-  }, [layers]);
+  }, [layers, lightTable]);
 
   // Push main canvas snapshot to history
   const pushHistory = useCallback(() => {
@@ -147,7 +166,6 @@ export function DrawingCanvas(): React.JSX.Element {
     const ctx = onionCanvas.getContext('2d');
     if (!ctx) return;
 
-    // Get previous cel composite snapshot
     const prevCel = activeCelIndex > 0 ? cels[activeCelIndex - 1] : null;
     const nextCel = activeCelIndex < cels.length - 1 ? cels[activeCelIndex + 1] : null;
 
@@ -162,12 +180,32 @@ export function DrawingCanvas(): React.JSX.Element {
     updateOnionSkin();
   }, [compositeLayers, updateOnionSkin]);
 
+  // Space key tracking for canvas panning
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && (e.target as HTMLElement).tagName !== 'INPUT') {
+        isSpaceDownRef.current = true;
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        isSpaceDownRef.current = false;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
   // Cel playback loop
   useEffect(() => {
     if (!isPlayingLoop || cels.length <= 1) return;
     const interval = setInterval(() => {
       setActiveCelIndex((prev) => (prev + 1) % cels.length);
-    }, 125); // 8 FPS
+    }, 125);
     return () => clearInterval(interval);
   }, [isPlayingLoop, cels.length]);
 
@@ -214,7 +252,6 @@ export function DrawingCanvas(): React.JSX.Element {
     const newName = `Cel ${cels.length + 1}`;
     const newCel: CelData = { id: newId, name: newName, layersData: {} };
 
-    // Clear layer canvases for new cel
     for (const l of layers) {
       const ctx = l.canvas.getContext('2d');
       ctx?.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -248,32 +285,18 @@ export function DrawingCanvas(): React.JSX.Element {
     if (cels.length <= 1) return;
     const newCels = cels.filter((_, idx) => idx !== activeCelIndex);
     setCels(newCels);
-    const newIndex = Math.max(0, activeCelIndex - 1);
-    setActiveCelIndex(newIndex);
+    setActiveCelIndex((prev) => Math.min(prev, newCels.length - 1));
+  }, [cels, activeCelIndex]);
 
-    const targetCel = newCels[newIndex];
-    if (targetCel) {
-      for (const l of layers) {
-        const ctx = l.canvas.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-          const data = targetCel.layersData[l.id];
-          if (data) ctx.putImageData(data, 0, 0);
-        }
-      }
-    }
-    compositeLayers();
-  }, [cels, activeCelIndex, layers, compositeLayers]);
-
-  // Layer management
+  // Layer stack actions
   const handleAddLayer = useCallback(() => {
     const newId = `layer-${Date.now().toString(36)}`;
     const newLayer: CanvasLayer = {
       id: newId,
-      name: `Layer ${layers.length + 1}`,
+      name: `Lớp ${layers.length + 1}`,
       visible: true,
-      opacity: 1,
       locked: false,
+      opacity: 1.0,
       canvas: createBlankCanvas(),
     };
     setLayers((prev) => [...prev, newLayer]);
@@ -282,10 +305,10 @@ export function DrawingCanvas(): React.JSX.Element {
 
   const handleDeleteLayer = useCallback((id: string) => {
     if (layers.length <= 1) return;
-    const updated = layers.filter((l) => l.id !== id);
-    setLayers(updated);
-    if (activeLayerId === id && updated[0]) {
-      setActiveLayerId(updated[0].id);
+    setLayers((prev) => prev.filter((l) => l.id !== id));
+    if (activeLayerId === id) {
+      const remaining = layers.filter((l) => l.id !== id);
+      setActiveLayerId(remaining[0]?.id || '');
     }
   }, [layers, activeLayerId]);
 
@@ -301,38 +324,40 @@ export function DrawingCanvas(): React.JSX.Element {
     );
   }, []);
 
-  const handleChangeOpacity = useCallback((id: string, opacity: number) => {
+  const handleOpacityChange = useCallback((id: string, opacity: number) => {
     setLayers((prev) =>
       prev.map((l) => (l.id === id ? { ...l, opacity } : l)),
     );
   }, []);
 
-  // Pointer drawing handlers
-  const getCanvasCoords = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = mainCanvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = CANVAS_WIDTH / rect.width;
-    const scaleY = CANVAS_HEIGHT / rect.height;
-    return {
-      x: Math.round((e.clientX - rect.left) * scaleX),
-      y: Math.round((e.clientY - rect.top) * scaleY),
-    };
-  };
+  // Pointer drawing handlers with Zoom/Pan & Coordinate conversion
+  const getCoords = useCallback((e: React.PointerEvent<HTMLCanvasElement>): Point => {
+    const container = viewportRef.current;
+    if (!container) return { x: 0, y: 0 };
+    const rect = container.getBoundingClientRect();
+    return screenToCanvasCoords(e.clientX, e.clientY, rect, CANVAS_WIDTH, CANVAS_HEIGHT, transform);
+  }, [transform]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Space or middle-click panning
+    if (e.button === 1 || isSpaceDownRef.current) {
+      setIsPanning(true);
+      panStartRef.current = { x: e.clientX - transform.panX, y: e.clientY - transform.panY };
+      return;
+    }
+
     if (!activeLayer || activeLayer.locked || !activeLayer.visible) return;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
-    const pt = getCanvasCoords(e);
+    const pt = getCoords(e);
     const layerCtx = activeLayer.canvas.getContext('2d');
     if (!layerCtx) return;
 
-    // Eyedropper tool
+    // Eyedropper
     if (tool === 'eyedropper') {
       const mainCanvas = mainCanvasRef.current;
       const mainCtx = mainCanvas?.getContext('2d');
-      if (mainCtx) {
+      if (mainCtx && pt.x >= 0 && pt.x < CANVAS_WIDTH && pt.y >= 0 && pt.y < CANVAS_HEIGHT) {
         const p = mainCtx.getImageData(pt.x, pt.y, 1, 1).data;
         const hex = `#${((1 << 24) + (p[0]! << 16) + (p[1]! << 8) + p[2]!).toString(16).slice(1)}`;
         setColor(hex);
@@ -341,7 +366,7 @@ export function DrawingCanvas(): React.JSX.Element {
       return;
     }
 
-    // Flood fill tool
+    // Flood Fill
     if (tool === 'fill') {
       const imgData = layerCtx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       const rgba = hexToRgba(color, 255);
@@ -356,59 +381,105 @@ export function DrawingCanvas(): React.JSX.Element {
 
     // Brush or Eraser stroke start
     setIsDrawing(true);
-    setLastPoint(pt);
+    pointsRef.current = [pt, pt, pt];
 
-    layerCtx.save();
-    if (tool === 'eraser') {
-      layerCtx.globalCompositeOperation = 'destination-out';
-      layerCtx.fillStyle = 'rgba(0,0,0,1)';
-    } else {
-      layerCtx.globalCompositeOperation = 'source-over';
-      layerCtx.fillStyle = color;
+    const brushSettings: BrushSettings = {
+      type: brushType,
+      size,
+      color,
+      smoothing: 0.35,
+    };
+
+    drawSmoothedSegment(layerCtx, pt, pt, pt, brushSettings);
+    if (symmetry) {
+      const mPt = mirrorPoint(pt, CANVAS_WIDTH / 2);
+      drawSmoothedSegment(layerCtx, mPt, mPt, mPt, brushSettings);
     }
-
-    layerCtx.beginPath();
-    layerCtx.arc(pt.x, pt.y, size / 2, 0, Math.PI * 2);
-    layerCtx.fill();
-    layerCtx.restore();
 
     compositeLayers();
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !lastPoint || !activeLayer || activeLayer.locked) return;
-    const currentPoint = getCanvasCoords(e);
+    if (isPanning) {
+      setTransform((prev) => ({
+        ...prev,
+        panX: e.clientX - panStartRef.current.x,
+        panY: e.clientY - panStartRef.current.y,
+      }));
+      return;
+    }
+
+    if (!isDrawing || !activeLayer || activeLayer.locked) return;
+    const pt = getCoords(e);
     const layerCtx = activeLayer.canvas.getContext('2d');
     if (!layerCtx) return;
 
-    layerCtx.save();
-    if (tool === 'eraser') {
-      layerCtx.globalCompositeOperation = 'destination-out';
-      layerCtx.strokeStyle = 'rgba(0,0,0,1)';
-    } else {
-      layerCtx.globalCompositeOperation = 'source-over';
-      layerCtx.strokeStyle = color;
+    pointsRef.current.push(pt);
+    if (pointsRef.current.length > 3) {
+      pointsRef.current.shift();
     }
-    layerCtx.lineWidth = size;
-    layerCtx.lineCap = 'round';
-    layerCtx.lineJoin = 'round';
 
-    layerCtx.beginPath();
-    layerCtx.moveTo(lastPoint.x, lastPoint.y);
-    layerCtx.lineTo(currentPoint.x, currentPoint.y);
-    layerCtx.stroke();
-    layerCtx.restore();
+    const p0 = pointsRef.current[0]!;
+    const p1 = pointsRef.current[1]!;
+    const p2 = pointsRef.current[2]!;
 
-    setLastPoint(currentPoint);
+    if (tool === 'eraser') {
+      layerCtx.save();
+      layerCtx.globalCompositeOperation = 'destination-out';
+      layerCtx.lineWidth = size * 1.5;
+      layerCtx.lineCap = 'round';
+      layerCtx.lineJoin = 'round';
+      layerCtx.beginPath();
+      layerCtx.moveTo(p1.x, p1.y);
+      layerCtx.lineTo(p2.x, p2.y);
+      layerCtx.stroke();
+      if (symmetry) {
+        const m1 = mirrorPoint(p1, CANVAS_WIDTH / 2);
+        const m2 = mirrorPoint(p2, CANVAS_WIDTH / 2);
+        layerCtx.beginPath();
+        layerCtx.moveTo(m1.x, m1.y);
+        layerCtx.lineTo(m2.x, m2.y);
+        layerCtx.stroke();
+      }
+      layerCtx.restore();
+    } else {
+      const brushSettings: BrushSettings = {
+        type: brushType,
+        size,
+        color,
+        smoothing: 0.35,
+      };
+      drawSmoothedSegment(layerCtx, p0, p1, p2, brushSettings);
+      if (symmetry) {
+        const m0 = mirrorPoint(p0, CANVAS_WIDTH / 2);
+        const m1 = mirrorPoint(p1, CANVAS_WIDTH / 2);
+        const m2 = mirrorPoint(p2, CANVAS_WIDTH / 2);
+        drawSmoothedSegment(layerCtx, m0, m1, m2, brushSettings);
+      }
+    }
+
     compositeLayers();
   };
 
   const handlePointerUp = () => {
+    if (isPanning) {
+      setIsPanning(false);
+    }
     if (isDrawing) {
       setIsDrawing(false);
-      setLastPoint(null);
+      pointsRef.current = [];
       pushHistory();
     }
+  };
+
+  // Canvas Zoom via wheel
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+    setTransform((prev) => ({
+      ...prev,
+      zoom: Math.max(0.25, Math.min(4.0, prev.zoom * zoomFactor)),
+    }));
   };
 
   // Undo / Redo
@@ -463,7 +534,7 @@ export function DrawingCanvas(): React.JSX.Element {
     img.src = currentAsset.imageDataUrl;
   }, [currentAsset, activeLayer, compositeLayers, pushHistory]);
 
-  // Preset silhouette
+  // Draw sample humanoid character
   const handleDrawSample = useCallback(() => {
     if (!activeLayer || activeLayer.locked) return;
     const ctx = activeLayer.canvas.getContext('2d');
@@ -474,35 +545,34 @@ export function DrawingCanvas(): React.JSX.Element {
     const cx = CANVAS_WIDTH / 2;
     const cy = CANVAS_HEIGHT / 2;
 
+    // Head & Neck
     ctx.beginPath();
     ctx.arc(cx, cy - 120, 50, 0, Math.PI * 2);
+    ctx.roundRect(cx - 18, cy - 80, 36, 30, 4);
     ctx.fill();
 
+    // Torso
     ctx.beginPath();
-    ctx.roundRect(cx - 45, cy - 60, 90, 160, 16);
+    ctx.roundRect(cx - 50, cy - 65, 100, 160, 16);
     ctx.fill();
 
+    // Left & Right Arms (attached to shoulders)
     ctx.beginPath();
-    ctx.roundRect(cx - 105, cy - 50, 30, 130, 12);
+    ctx.roundRect(cx - 85, cy - 60, 38, 145, 12);
+    ctx.roundRect(cx + 47, cy - 60, 38, 145, 12);
     ctx.fill();
 
+    // Left & Right Legs
     ctx.beginPath();
-    ctx.roundRect(cx + 75, cy - 50, 30, 130, 12);
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.roundRect(cx - 50, cy + 110, 35, 170, 14);
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.roundRect(cx + 15, cy + 110, 35, 170, 14);
+    ctx.roundRect(cx - 45, cy + 90, 38, 180, 14);
+    ctx.roundRect(cx + 7, cy + 90, 38, 180, 14);
     ctx.fill();
 
     compositeLayers();
     pushHistory();
   }, [activeLayer, color, compositeLayers, pushHistory]);
 
-  // Send composite to Rig
+  // Send composite to Rig with Auto-Skeleton & Scene Staging
   const handleSendToRig = async () => {
     const mainCanvas = mainCanvasRef.current;
     if (!mainCanvas) return;
@@ -534,11 +604,14 @@ export function DrawingCanvas(): React.JSX.Element {
         minute: '2-digit',
         second: '2-digit',
       });
+      const assetName = currentAsset ? `${currentAsset.name} (Cel)` : `Hand-drawn Cel ${timeStr}`;
+
+      // 1. Import image and triangulate mesh
       const result = await dispatch({
         type: 'import_image',
         domain: 'asset',
         data: {
-          name: currentAsset ? `${currentAsset.name} (Cel)` : `Hand-drawn Cel ${timeStr}`,
+          name: assetName,
           dataUrl,
           width: CANVAS_WIDTH,
           height: CANVAS_HEIGHT,
@@ -547,7 +620,38 @@ export function DrawingCanvas(): React.JSX.Element {
       });
 
       if (result.status === 'success' && result.entityId) {
-        setSelectedAssetId(result.entityId);
+        const assetId = result.entityId;
+        setSelectedAssetId(assetId);
+
+        // 2. Automatically generate humanoid skeleton & compute skinning weights
+        await dispatch({
+          type: 'apply_rig_template',
+          domain: 'rig',
+          targetId: assetId,
+          data: { assetId, template: 'humanoid' },
+        });
+
+        // 3. Automatically stage character on 2.5D scene
+        const sceneData = projectState.getAllSceneData()[0];
+        const sceneId = sceneData?.id ?? 'scene-default';
+        const instRes = await dispatch({
+          type: 'add_instance',
+          domain: 'scene',
+          data: {
+            sceneId,
+            assetId,
+            name: assetName,
+            position: { x: 0, y: 0 },
+            depth: 0,
+            scale: 1,
+            rotation: 0,
+          },
+        });
+        if (instRes.status === 'success' && instRes.entityId) {
+          setSelectedInstanceId(instRes.entityId);
+        }
+
+        // 4. Switch to Rig workspace
         if (setWorkspace) setWorkspace('rig');
         if (setMode) setMode('rig');
       }
@@ -563,164 +667,54 @@ export function DrawingCanvas(): React.JSX.Element {
 
   return (
     <div className="drawing-canvas-container">
-      {/* Top Drawing Toolbar */}
-      <div className="drawing-toolbar">
-        <div className="drawing-toolbar__left">
-          {/* Tool buttons: Brush, Eraser, Eyedropper, Fill Bucket */}
-          <Button
-            icon={Paintbrush}
-            size="sm"
-            variant="ghost"
-            active={tool === 'brush'}
-            onClick={() => setTool('brush')}
-            title="Cọ vẽ (Brush)"
-          >
-            Vẽ
-          </Button>
-          <Button
-            icon={Eraser}
-            size="sm"
-            variant="ghost"
-            active={tool === 'eraser'}
-            onClick={() => setTool('eraser')}
-            title="Tẩy (Eraser)"
-          >
-            Tẩy
-          </Button>
-          <Button
-            icon={Pipette}
-            iconOnly
-            size="sm"
-            variant="ghost"
-            active={tool === 'eyedropper'}
-            onClick={() => setTool('eyedropper')}
-            title="Hút màu từ canvas (Eyedropper)"
-          />
-          <Button
-            icon={PaintBucket}
-            iconOnly
-            size="sm"
-            variant="ghost"
-            active={tool === 'fill'}
-            onClick={() => setTool('fill')}
-            title="Đổ thùng sơn (Fill Bucket)"
-          />
-
-          <div className="drawing-toolbar__divider" />
-
-          {/* Size slider */}
-          <div className="drawing-size-control">
-            <span>{size}px</span>
-            <input
-              type="range"
-              min="2"
-              max="64"
-              value={size}
-              onChange={(e) => setSize(Number(e.target.value))}
-              title={`Cỡ nét: ${size}px`}
-            />
-          </div>
-
-          <div className="drawing-toolbar__divider" />
-
-          {/* Palette */}
-          <div className="drawing-palette">
-            {COLOR_PALETTE.map((c) => (
-              <button
-                key={c}
-                className={[
-                  'drawing-palette__swatch',
-                  color === c && tool === 'brush' ? 'drawing-palette__swatch--active' : '',
-                ].filter(Boolean).join(' ')}
-                style={{ backgroundColor: c }}
-                onClick={() => {
-                  setColor(c);
-                  if (tool === 'eraser') setTool('brush');
-                }}
-                title={c}
-              />
-            ))}
-            <input
-              type="color"
-              className="drawing-palette__picker"
-              value={color}
-              onChange={(e) => {
-                setColor(e.target.value);
-                if (tool === 'eraser') setTool('brush');
-              }}
-              title="Màu tùy chỉnh"
-            />
-          </div>
-        </div>
-
-        <div className="drawing-toolbar__right">
-          <Button
-            icon={RotateCcw}
-            iconOnly
-            size="sm"
-            variant="ghost"
-            onClick={handleUndo}
-            disabled={!canUndo}
-            title="Hoàn tác (Undo)"
-          />
-          <Button
-            icon={RotateCw}
-            iconOnly
-            size="sm"
-            variant="ghost"
-            onClick={handleRedo}
-            disabled={!canRedo}
-            title="Làm lại (Redo)"
-          />
-          <Button
-            icon={Trash2}
-            iconOnly
-            size="sm"
-            variant="ghost"
-            onClick={handleClear}
-            title="Xóa trắng layer hiện tại (Clear)"
-          />
-
-          <div className="drawing-toolbar__divider" />
-
-          {currentAsset?.imageDataUrl && (
-            <Button
-              icon={Upload}
-              size="sm"
-              variant="secondary"
-              onClick={handleLoadAssetImage}
-              title={`Nạp ảnh của '${currentAsset.name}' lên canvas để vẽ đè / chỉnh sửa`}
-            >
-              Nạp {currentAsset.name}
-            </Button>
-          )}
-
-          <Button
-            icon={Sparkles}
-            size="sm"
-            variant="ghost"
-            onClick={handleDrawSample}
-            title="Vẽ mẫu hình bóng nhân vật tự động"
-          >
-            Mẫu
-          </Button>
-
-          <button
-            className="btn-send-to-rig"
-            onClick={handleSendToRig}
-            disabled={isExporting}
-            title="Trích xuất lưới 2.5D và chuyển sang Khung xương (Rig)"
-          >
-            <span>Chuyển sang Rig</span>
-            <ArrowRight size={14} />
-          </button>
-        </div>
-      </div>
+      {/* Professional Drawing Toolbar */}
+      <DrawingToolbar
+        tool={tool}
+        setTool={setTool}
+        brushType={brushType}
+        setBrushType={setBrushType}
+        color={color}
+        setColor={setColor}
+        size={size}
+        setSize={setSize}
+        symmetry={symmetry}
+        setSymmetry={setSymmetry}
+        lightTable={lightTable}
+        setLightTable={setLightTable}
+        zoom={transform.zoom}
+        onZoomIn={() =>
+          setTransform((prev) => ({ ...prev, zoom: Math.min(4.0, prev.zoom * 1.25) }))
+        }
+        onZoomOut={() =>
+          setTransform((prev) => ({ ...prev, zoom: Math.max(0.25, prev.zoom * 0.8) }))
+        }
+        onZoomReset={() => setTransform({ zoom: 1.0, panX: 0, panY: 0 })}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onClear={handleClear}
+        onDrawSample={handleDrawSample}
+        onSendToRig={handleSendToRig}
+        isExporting={isExporting}
+        currentAssetName={currentAsset?.name}
+        onLoadAssetImage={currentAsset?.imageDataUrl ? handleLoadAssetImage : undefined}
+      />
 
       {/* Main Body: Center Viewport + Right Layer Stack */}
       <div className="drawing-workspace-body">
-        <div className="drawing-viewport">
-          <div className="drawing-surface-wrapper">
+        <div
+          className="drawing-viewport"
+          ref={viewportRef}
+          onWheel={handleWheel}
+        >
+          <div
+            className="drawing-surface-wrapper"
+            style={{
+              transform: `translate(${transform.panX}px, ${transform.panY}px) scale(${transform.zoom})`,
+              transformOrigin: 'center center',
+            }}
+          >
             {/* Onion Skin ghost canvas */}
             <canvas
               ref={onionCanvasRef}
@@ -728,21 +722,41 @@ export function DrawingCanvas(): React.JSX.Element {
               height={CANVAS_HEIGHT}
               className="drawing-canvas drawing-canvas--onion"
             />
-            {/* Main Interactive drawing canvas */}
+
+            {/* Main Interactive Drawing Canvas */}
             <canvas
               ref={mainCanvasRef}
               width={CANVAS_WIDTH}
               height={CANVAS_HEIGHT}
-              className="drawing-canvas drawing-canvas--main"
+              className="drawing-canvas drawing-canvas--active"
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
+              style={{
+                cursor: tool === 'eyedropper' ? 'crosshair' : tool === 'fill' ? 'cell' : 'default',
+              }}
             />
+
+            {/* Symmetry Vertical Axis Guide */}
+            {symmetry && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  bottom: 0,
+                  left: '50%',
+                  width: '1px',
+                  background: 'rgba(99, 102, 241, 0.45)',
+                  pointerEvents: 'none',
+                  borderRight: '1px dashed rgba(255, 255, 255, 0.3)',
+                }}
+              />
+            )}
           </div>
         </div>
 
-        {/* Right side: Layer Stack */}
+        {/* Right Panel: Layer Stack */}
         <LayerStackPanel
           layers={layers}
           activeLayerId={activeLayerId}
@@ -751,11 +765,11 @@ export function DrawingCanvas(): React.JSX.Element {
           onDeleteLayer={handleDeleteLayer}
           onToggleVisibility={handleToggleVisibility}
           onToggleLock={handleToggleLock}
-          onChangeOpacity={handleChangeOpacity}
+          onChangeOpacity={handleOpacityChange}
         />
       </div>
 
-      {/* Bottom: Cel Timeline Strip & Onion Skinning Controls */}
+      {/* Bottom: Cel Timeline Strip */}
       <CelStrip
         cels={celItems}
         activeCelIndex={activeCelIndex}
