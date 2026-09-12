@@ -92,7 +92,10 @@ function EditorLayout(): React.JSX.Element {
       {/* Top Menu Bar */}
       <MenuBar
         mode={mode}
-        onModeChange={setMode}
+        onModeChange={(newMode) => {
+          setMode(newMode);
+          setIsPlaying(newMode === 'animate');
+        }}
         canUndo={false}
         canRedo={false}
         onUndo={() => {}}

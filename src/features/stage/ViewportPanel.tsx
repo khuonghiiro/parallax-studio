@@ -38,12 +38,15 @@ export function ViewportPanel({
   const {
     snapshot,
     selectedAssetId,
+    setSelectedAssetId,
     selectedBoneId,
     projectState,
+    getAssetData,
     setFps,
     currentFrame,
     setCurrentFrame,
     isPlaying,
+    activeClipId,
     importImageFile,
     loadDemoCharacter,
     dispatch,
@@ -68,7 +71,17 @@ export function ViewportPanel({
   const [cameraMode, setCameraMode] = useState<'orthographic' | 'perspective'>('orthographic');
   const [showShadows, setShowShadows] = useState<boolean>(true);
 
-  const asset = selectedAssetId ? projectState.getAssetData(selectedAssetId) : undefined;
+  // Auto-select first asset if none is selected and assets exist
+  useEffect(() => {
+    if (!selectedAssetId && snapshot?.assets && snapshot.assets.size > 0) {
+      const firstId = snapshot.assets.keys().next().value;
+      if (firstId) {
+        setSelectedAssetId(firstId);
+      }
+    }
+  }, [selectedAssetId, snapshot, setSelectedAssetId]);
+
+  const asset = selectedAssetId ? getAssetData(selectedAssetId) : undefined;
   const activeViewAngle = (asset?.viewSet?.activeView ?? 'front') as ViewAngle;
 
   // Initialize Three.js viewport controller
@@ -103,12 +116,12 @@ export function ViewportPanel({
       return;
     }
 
-    const asset = projectState.getAssetData(selectedAssetId);
-    if (!asset) return;
+    const currentAsset = getAssetData(selectedAssetId);
+    if (!currentAsset) return;
 
     let isCancelled = false;
 
-    buildAssetMesh(asset).then((built) => {
+    buildAssetMesh(currentAsset).then((built) => {
       if (isCancelled || !controllerRef.current) return;
 
       currentBuiltRef.current = built;
@@ -125,40 +138,122 @@ export function ViewportPanel({
     return () => {
       isCancelled = true;
     };
-  }, [selectedAssetId, snapshot, projectState]);
+  }, [selectedAssetId, snapshot, getAssetData]);
 
   // Playback & deformation animation loop
   useEffect(() => {
     const built = currentBuiltRef.current;
     if (!built?.skeleton) return;
 
+    if (built.skeletonHelper) {
+      built.skeletonHelper.visible = mode === 'setup' && !isPlaying;
+    }
+
     // Evaluate procedural or keyframed pose for preview
     const t = currentFrame * 0.08;
     const rotations = new Map<string, number>();
 
     if (mode === 'animate' || isPlaying) {
-      // Natural sway/walk deformation demo
-      rotations.set('spine', Math.sin(t) * 0.1);
-      rotations.set('upper_arm_l', Math.sin(t) * 0.45);
-      rotations.set('forearm_l', Math.max(0, Math.sin(t + 0.5) * 0.4));
-      rotations.set('upper_arm_r', -Math.sin(t) * 0.45);
-      rotations.set('forearm_r', Math.max(0, -Math.sin(t + 0.5) * 0.4));
-      rotations.set('thigh_l', -Math.sin(t) * 0.35);
-      rotations.set('shin_l', Math.max(0, Math.sin(t) * 0.35));
-      rotations.set('thigh_r', Math.sin(t) * 0.35);
-      rotations.set('shin_r', Math.max(0, -Math.sin(t) * 0.35));
-      rotations.set('head', Math.sin(t * 0.5) * 0.08);
+      if (activeClipId === 'idle') {
+        // 1. Natural Breathing Idle: Single harmonic biological rhythm
+        // Chest gently lifts, head counter-balances. Legs are firmly planted (ZERO wobbling).
+        const breath = Math.sin(t * 0.45) * 0.028;
+
+        rotations.set('spine', breath * 0.8);
+        rotations.set('neck', -breath * 0.35);
+        rotations.set('head', Math.sin(t * 0.25) * 0.015);
+
+        // Arms hang naturally at rest with gentle micro-follow of breath
+        rotations.set('upper_arm_l', 0.02 + breath * 0.25);
+        rotations.set('forearm_l', 0.04);
+        rotations.set('hand_l', 0);
+
+        rotations.set('upper_arm_r', -0.02 - breath * 0.25);
+        rotations.set('forearm_r', 0.04);
+        rotations.set('hand_r', 0);
+
+        // Legs are firmly planted on the ground (zero wobbling)
+        rotations.set('thigh_l', 0);
+        rotations.set('shin_l', 0);
+        rotations.set('foot_l', 0);
+        rotations.set('thigh_r', 0);
+        rotations.set('shin_r', 0);
+        rotations.set('foot_r', 0);
+      } else if (activeClipId === 'walk') {
+        // 2. Royal Knight Walk: Noble front-facing stride with coordinated smooth sway
+        // Pure harmonic curves guarantee zero popping, tearing, or limb pinching
+        const walkPhase = t * 0.9;
+        const stride = Math.sin(walkPhase);
+
+        // Smooth subtle weight shift
+        rotations.set('thigh_l', stride * 0.04);
+        rotations.set('shin_l', (1 - Math.cos(walkPhase)) * 0.025);
+        rotations.set('foot_l', -stride * 0.02);
+
+        rotations.set('thigh_r', -stride * 0.04);
+        rotations.set('shin_r', (1 - Math.cos(walkPhase + Math.PI)) * 0.025);
+        rotations.set('foot_r', stride * 0.02);
+
+        // Smooth arm counter-swing
+        rotations.set('upper_arm_l', -stride * 0.05);
+        rotations.set('forearm_l', 0.02 + (1 - Math.cos(walkPhase)) * 0.02);
+        rotations.set('hand_l', 0);
+
+        rotations.set('upper_arm_r', stride * 0.05);
+        rotations.set('forearm_r', -0.02 - (1 - Math.cos(walkPhase + Math.PI)) * 0.02);
+        rotations.set('hand_r', 0);
+
+        // Torso vertical bounce (two beats per full cycle)
+        rotations.set('spine', Math.sin(walkPhase * 2) * 0.008);
+        rotations.set('neck', 0);
+        rotations.set('head', -Math.sin(walkPhase * 2) * 0.005);
+      } else if (activeClipId === 'ready') {
+        // 3. Combat Ready Stance: Heroic guard posture framing chest & sword hilt
+        const breath = Math.sin(t * 0.5) * 0.012;
+
+        // Grounded, braced stance
+        rotations.set('thigh_l', -0.02);
+        rotations.set('shin_l', 0.02);
+        rotations.set('foot_l', 0);
+        rotations.set('thigh_r', 0.02);
+        rotations.set('shin_r', -0.02);
+        rotations.set('foot_r', 0);
+
+        // Arms poised inward in heroic combat guard
+        rotations.set('upper_arm_l', 0.04);
+        rotations.set('forearm_l', 0.08);
+        rotations.set('hand_l', 0.02);
+
+        rotations.set('upper_arm_r', -0.04);
+        rotations.set('forearm_r', -0.08);
+        rotations.set('hand_r', -0.02);
+
+        // Alert torso posture
+        rotations.set('spine', -0.02 + breath * 0.5);
+        rotations.set('neck', 0.01);
+        rotations.set('head', 0.015 - breath * 0.25);
+      }
     } else {
       // Rest pose in setup mode
       rotations.set('spine', 0);
+      rotations.set('neck', 0);
+      rotations.set('head', 0);
       rotations.set('upper_arm_l', 0);
       rotations.set('forearm_l', 0);
+      rotations.set('hand_l', 0);
       rotations.set('upper_arm_r', 0);
       rotations.set('forearm_r', 0);
+      rotations.set('hand_r', 0);
+      rotations.set('thigh_l', 0);
+      rotations.set('shin_l', 0);
+      rotations.set('foot_l', 0);
+      rotations.set('thigh_r', 0);
+      rotations.set('shin_r', 0);
+      rotations.set('foot_r', 0);
     }
 
     applyPoseToSkeleton(built.skeleton, rotations);
-  }, [currentFrame, mode, isPlaying]);
+  }, [currentFrame, mode, isPlaying, activeClipId]);
 
   // Animation timeline advance when playing
   useEffect(() => {

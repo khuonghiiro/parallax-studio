@@ -7,6 +7,7 @@ import {
   reconstructSnapshot,
   type ProjectSnapshot,
   type SerializableSnapshot,
+  type AssetData,
 } from '@parallax/application';
 import type { CommandPayload, CommandResult } from '@parallax/contracts';
 import type { EditorMode } from './layout/MenuBar.js';
@@ -29,9 +30,12 @@ export interface EditorContextValue {
   fps: number;
   setFps: (fps: number) => void;
   isRemoteConnected: boolean;
+  getAssetData: (id: string) => AssetData | undefined;
   dispatch: (payload: CommandPayload) => Promise<CommandResult>;
   importImageFile: (file: File) => Promise<string | undefined>;
   loadDemoCharacter: () => Promise<string | undefined>;
+  activeClipId: 'idle' | 'walk' | 'ready';
+  setActiveClipId: (clip: 'idle' | 'walk' | 'ready') => void;
 }
 
 const EditorContext = createContext<EditorContextValue | null>(null);
@@ -57,6 +61,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [fps, setFps] = useState<number>(60);
   const [isRemoteConnected, setIsRemoteConnected] = useState<boolean>(false);
+  const [activeClipId, setActiveClipId] = useState<'idle' | 'walk' | 'ready'>('idle');
 
   // Initialize local command handlers & fallback project
   useEffect(() => {
@@ -102,6 +107,26 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             const reconstructed = reconstructSnapshot(parsed.snapshot);
             setSnapshot(reconstructed);
             setIsRemoteConnected(true);
+
+            // Synchronize in-browser projectState cache
+            for (const [id, assetData] of reconstructed.assets) {
+              projectState.setAssetData(id, assetData);
+            }
+            for (const [id, sceneData] of reconstructed.scenes) {
+              projectState.setSceneData(id, sceneData);
+            }
+            if (reconstructed.manifest) {
+              projectState.load(reconstructed.manifest);
+            }
+
+            // Auto-select latest asset when assets change
+            setSelectedAssetId((prev) => {
+              if (prev && reconstructed.assets.has(prev)) {
+                return prev;
+              }
+              const keys = Array.from(reconstructed.assets.keys());
+              return keys[keys.length - 1] || null;
+            });
           }
         } catch {
           // Ignore parse errors on ping
@@ -273,6 +298,13 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return undefined;
   }, [dispatch]);
 
+  const getAssetData = useCallback(
+    (id: string): AssetData | undefined => {
+      return snapshot?.assets.get(id) ?? projectState.getAssetData(id);
+    },
+    [snapshot, projectState],
+  );
+
   const value = useMemo(
     () => ({
       projectState,
@@ -292,9 +324,12 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       fps,
       setFps,
       isRemoteConnected,
+      getAssetData,
       dispatch,
       importImageFile,
       loadDemoCharacter,
+      activeClipId,
+      setActiveClipId,
     }),
     [
       projectState,
@@ -308,9 +343,11 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       isPlaying,
       fps,
       isRemoteConnected,
+      getAssetData,
       dispatch,
       importImageFile,
       loadDemoCharacter,
+      activeClipId,
     ],
   );
 

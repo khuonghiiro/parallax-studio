@@ -44,7 +44,19 @@ export function handleImportImage(
     const alphaUint8 = rawAlpha instanceof Uint8Array ? rawAlpha : new Uint8Array(rawAlpha);
     try {
       const contourResult = extractContour(alphaUint8, width, height, 2.0);
-      mesh = triangulateContour(contourResult.outer, contourResult.holes);
+      const centeredOuter = {
+        points: contourResult.outer.points.map((p) => ({
+          x: p.x - width / 2,
+          y: height / 2 - p.y,
+        })),
+      };
+      const centeredHoles = contourResult.holes.map((h) => ({
+        points: h.points.map((p) => ({
+          x: p.x - width / 2,
+          y: height / 2 - p.y,
+        })),
+      }));
+      mesh = triangulateContour(centeredOuter, centeredHoles);
     } catch {
       // Fallback to bounding box if contour extraction fails
       mesh = createBoxMesh(width, height);
@@ -105,19 +117,55 @@ export function handleImportImage(
 }
 
 /**
- * Creates a standard subdivided 2D rectangular mesh.
+ * Creates a high-density subdivided 2D deformable planar mesh.
+ * Provides rich internal vertices for realistic skeletal skinning deformation.
  */
-function createBoxMesh(width: number, height: number): TriangulationResult {
-  const outer = {
-    points: [
-      { x: -width / 2, y: -height / 2 },
-      { x: width / 2, y: -height / 2 },
-      { x: width / 2, y: height / 2 },
-      { x: -width / 2, y: height / 2 },
-    ],
-  };
+function createBoxMesh(
+  width: number,
+  height: number,
+  cols = 16,
+  rows = 24,
+): TriangulationResult {
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const vertices: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
 
-  return triangulateContour(outer);
+  for (let r = 0; r <= rows; r++) {
+    const vNorm = r / rows;
+    const y = halfH - vNorm * height;
+    const v = 1.0 - vNorm;
+
+    for (let c = 0; c <= cols; c++) {
+      const uNorm = c / cols;
+      const x = -halfW + uNorm * width;
+      const u = uNorm;
+
+      vertices.push(x, y);
+      uvs.push(u, v);
+    }
+  }
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const p0 = r * (cols + 1) + c;
+      const p1 = p0 + 1;
+      const p2 = (r + 1) * (cols + 1) + c;
+      const p3 = p2 + 1;
+
+      indices.push(p0, p2, p1);
+      indices.push(p1, p2, p3);
+    }
+  }
+
+  return {
+    vertices,
+    uvs,
+    indices,
+    vertexCount: (cols + 1) * (rows + 1),
+    triangleCount: indices.length / 3,
+  };
 }
 
 /**
@@ -342,6 +390,43 @@ export function handleSetMorphWeight(
     entityId: assetId,
     revision,
     data: { assetId, morphName, weight },
+  };
+}
+
+/**
+ * Handle set_layers command.
+ * Sets the decomposed cutout layers for an asset.
+ */
+export function handleSetLayers(
+  state: ProjectState,
+  payload: CommandPayload,
+): CommandResult {
+  const assetId = (payload.targetId || payload.data.assetId) as string;
+  const layers = payload.data.layers as import('@parallax/contracts').Layer[];
+
+  if (!assetId || !Array.isArray(layers)) {
+    return {
+      status: 'validation_error',
+      error: 'assetId and layers array are required for set_layers',
+    };
+  }
+
+  const asset = state.getAssetData(assetId);
+  if (!asset) {
+    return { status: 'not_found', error: `Asset ${assetId} not found` };
+  }
+
+  state.setAssetData(assetId, {
+    ...asset,
+    layers,
+  });
+
+  const revision = state.incrementRevision();
+  return {
+    status: 'success',
+    entityId: assetId,
+    revision,
+    data: { assetId, layerCount: layers.length },
   };
 }
 

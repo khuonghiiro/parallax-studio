@@ -20,6 +20,7 @@ export function PropertiesPanel({
   mode,
 }: PropertiesPanelProps): React.JSX.Element {
   const {
+    snapshot,
     selectedAssetId,
     selectedBoneId,
     projectState,
@@ -36,7 +37,9 @@ export function PropertiesPanel({
   const [smileWeight, setSmileWeight] = useState<number>(0);
   const [squashValue, setSquashValue] = useState<number>(0);
 
-  const asset = selectedAssetId ? projectState.getAssetData(selectedAssetId) : undefined;
+  const asset = selectedAssetId
+    ? (snapshot?.assets.get(selectedAssetId) ?? projectState.getAssetData(selectedAssetId))
+    : undefined;
   const bone = asset?.skeleton?.bones.find((b) => b.id === selectedBoneId);
 
   const handleMorphChange = async (name: string, value: number) => {

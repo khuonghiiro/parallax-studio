@@ -40,13 +40,8 @@
 .viewport__canvas {
   flex: 1;
   position: relative;
-  background: #141420;
+  background: radial-gradient(ellipse at 50% 48%, #141726 0%, #0b0c14 65%, #06070a 100%);
   overflow: hidden;
-
-  /* Subtle grid pattern */
-  background-image:
-    radial-gradient(circle, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 24px 24px;
 }
 
 /* ── Empty State ── */

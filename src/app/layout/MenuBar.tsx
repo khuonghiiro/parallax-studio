@@ -92,10 +92,15 @@ export function MenuBar({
           id="btn-save"
         />
         <Button
-          icon={Download} iconOnly size="sm" variant="ghost"
-          title="Export Video" onClick={onExport}
+          icon={Download}
+          size="sm"
+          variant="primary"
+          title="Export Animation Video (.webm)"
+          onClick={onExport}
           id="btn-export"
-        />
+        >
+          Export
+        </Button>
       </div>
     </header>
   );

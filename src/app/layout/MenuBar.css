@@ -9,59 +9,85 @@
   border-bottom: 1px solid var(--border-subtle);
   gap: var(--sp-4);
   z-index: 100;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 
 /* Brand */
 .menubar__brand {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
 }
 
 .menubar__logo {
-  font-size: var(--text-xl);
-  color: var(--accent);
+  font-size: 16px;
+  background: linear-gradient(135deg, #a5b4fc 0%, #6366f1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
   line-height: 1;
+  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.5));
 }
 
 .menubar__name {
   font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.menubar__badge {
+  background: rgba(99, 102, 241, 0.18);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  color: #a5b4fc;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-left: 2px;
 }
 
 /* Mode Toggle */
 .menubar__modes {
   display: flex;
   background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 2px;
   gap: 2px;
 }
 
 .menubar__mode {
-  padding: var(--sp-1) var(--sp-6);
+  padding: 3px 12px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-sans);
   font-size: var(--text-xs);
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  transition: all 0.15s ease;
+  letter-spacing: 0.03em;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .menubar__mode:hover {
   color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 .menubar__mode--active {
   background: var(--accent);
   color: #fff;
+  box-shadow: 0 1px 8px rgba(99, 102, 241, 0.45);
+}
+
+.menubar__mode--active:hover {
+  background: var(--accent-hover);
 }
 
 /* Spacer */
@@ -78,7 +104,7 @@
 
 .menubar__divider {
   width: 1px;
-  height: 16px;
-  background: var(--border-default);
+  height: 18px;
+  background: var(--border-subtle);
   margin: 0 var(--sp-2);
 }

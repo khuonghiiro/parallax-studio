@@ -9,6 +9,7 @@ import {
   handleAddViewEntry,
   handleSetWarpGrid,
   handleSetMorphWeight,
+  handleSetLayers,
 } from './asset-handlers.js';
 import {
   handleApplyRigTemplate,
@@ -120,6 +121,18 @@ export function registerDefaultHandlers(
       domain: 'rig',
       handler: (payload) => handleSetMorphWeight(state, payload),
       description: 'Set the active weight for a facial expression morph target',
+    });
+  }
+
+  if (!bus.hasHandler('set_layers')) {
+    bus.registerHandler('set_layers', async (payload) => {
+      return handleSetLayers(state, payload);
+    });
+    registry.register({
+      type: 'set_layers',
+      domain: 'asset',
+      handler: (payload) => handleSetLayers(state, payload),
+      description: 'Set decomposed cutout layers and bone bindings for an asset',
     });
   }
 

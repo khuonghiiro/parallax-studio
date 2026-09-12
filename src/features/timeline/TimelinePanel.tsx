@@ -26,6 +26,8 @@ export function TimelinePanel(): React.JSX.Element {
     selectedAssetId,
     projectState,
     dispatch,
+    activeClipId,
+    setActiveClipId,
   } = useEditor();
 
   const scenes = projectState.getAllSceneData();
@@ -119,9 +121,34 @@ export function TimelinePanel(): React.JSX.Element {
     <div className="timeline">
       {/* Timeline Header */}
       <div className="timeline__header">
-        <span className="timeline__clip-name">
-          {asset ? `${asset.name} (Walk Loop)` : 'No clip selected'}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="timeline__clip-name">
+            {asset ? asset.name : 'No clip selected'}
+          </span>
+          <div className="timeline__clip-selector">
+            <button
+              className={`timeline__clip-pill ${activeClipId === 'idle' ? 'timeline__clip-pill--active' : ''}`}
+              onClick={() => setActiveClipId('idle')}
+              title="Đứng thở tự nhiên: chân bám đất vững chãi, ngực nhấp nhô nhịp thở"
+            >
+              🌿 Đứng thở (Idle)
+            </button>
+            <button
+              className={`timeline__clip-pill ${activeClipId === 'walk' ? 'timeline__clip-pill--active' : ''}`}
+              onClick={() => setActiveClipId('walk')}
+              title="Bước đi tự nhiên: sải bước luân phiên, tay vung đối xứng"
+            >
+              🚶‍♂️ Bước đi (Walk)
+            </button>
+            <button
+              className={`timeline__clip-pill ${activeClipId === 'ready' ? 'timeline__clip-pill--active' : ''}`}
+              onClick={() => setActiveClipId('ready')}
+              title="Tư thế thủ: hạ thấp trọng tâm, sẵn sàng chiến đấu"
+            >
+              ⚔️ Thủ thế (Ready)
+            </button>
+          </div>
+        </div>
 
         <div className="timeline__spacer" />
 

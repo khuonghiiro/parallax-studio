@@ -66,6 +66,23 @@ export const LayerSchema = z.object({
 
   /** Revision when this layer was last modified. */
   updatedRevision: RevisionSchema,
+
+  /** Direct data URL for the layer texture image. */
+  imageDataUrl: z.string().optional(),
+
+  /** Name of the bone this layer binds to for rigid cutout animation. */
+  bindBoneName: z.string().optional(),
+
+  /** Position offset relative to character origin. */
+  position: Point2DSchema.optional(),
+
+  /** Texture UV coordinates [0..1] when sampling from atlas/master texture. */
+  uvBounds: z.object({
+    uMin: z.number(),
+    vMin: z.number(),
+    uMax: z.number(),
+    vMax: z.number(),
+  }).optional(),
 });
 export type Layer = z.infer<typeof LayerSchema>;
 

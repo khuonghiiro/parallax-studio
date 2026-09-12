@@ -27,10 +27,14 @@ export function HierarchyPanel({
     projectState,
     dispatch,
     loadDemoCharacter,
+    activeClipId,
+    setActiveClipId,
   } = useEditor();
 
   const assets = snapshot ? Object.entries(snapshot.manifest.assets) : [];
-  const currentAssetData = selectedAssetId ? projectState.getAssetData(selectedAssetId) : undefined;
+  const currentAssetData = selectedAssetId
+    ? (snapshot?.assets.get(selectedAssetId) ?? projectState.getAssetData(selectedAssetId))
+    : undefined;
   const bones = currentAssetData?.skeleton?.bones || [];
 
   const filteredAssets = assets.filter(([_, a]) =>
@@ -98,15 +102,33 @@ export function HierarchyPanel({
         ) : (
           <div className="hierarchy__list">
             {filteredAssets.map(([id, asset]) => (
-              <div
-                key={id}
-                className={`tree-item ${selectedAssetId === id ? 'tree-item--selected' : ''}`}
-                onClick={() => setSelectedAssetId(id)}
-              >
-                <Icon icon={Layers} size="sm" color="var(--accent)" />
-                <span className="tree-item__label">{asset.name}</span>
-                {asset.hasRig && <span className="badge badge--success">Rigged</span>}
-              </div>
+              <React.Fragment key={id}>
+                <div
+                  className={`tree-item ${selectedAssetId === id ? 'tree-item--selected' : ''}`}
+                  onClick={() => setSelectedAssetId(id)}
+                >
+                  <Icon icon={Layers} size="sm" color="var(--accent)" />
+                  <span className="tree-item__label">{asset.name}</span>
+                  {asset.hasRig && <span className="badge badge--success">Rigged</span>}
+                </div>
+                {selectedAssetId === id && currentAssetData?.layers && currentAssetData.layers.length > 0 && (
+                  <div className="hierarchy__sublist" style={{ paddingLeft: '16px' }}>
+                    {currentAssetData.layers.map((layer) => (
+                      <div
+                        key={layer.id}
+                        className="tree-item"
+                        style={{ fontSize: '11px', opacity: layer.visible ? 0.9 : 0.4 }}
+                      >
+                        <span style={{ color: 'var(--accent)', fontSize: '10px' }}>▪</span>
+                        <span className="tree-item__label">{layer.name}</span>
+                        <span className="badge badge--neutral" style={{ fontSize: '9px' }}>
+                          {layer.bindBoneName || `z:${layer.drawOrder}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </React.Fragment>
             ))}
           </div>
         )}
@@ -192,9 +214,32 @@ export function HierarchyPanel({
       {mode === 'animate' && (
         <Panel title="Animations" id="panel-animations">
           <div className="hierarchy__list">
-            <div className="tree-item tree-item--selected">
-              <Icon icon={Film} size="sm" color="var(--warning)" />
-              <span className="tree-item__label">Walk / Sway Demo Clip</span>
+            <div
+              className={`tree-item ${activeClipId === 'idle' ? 'tree-item--selected' : ''}`}
+              onClick={() => setActiveClipId('idle')}
+              style={{ cursor: 'pointer' }}
+            >
+              <Icon icon={Film} size="sm" color={activeClipId === 'idle' ? 'var(--accent)' : 'var(--warning)'} />
+              <span className="tree-item__label">🌿 Đứng thở (Idle)</span>
+              {activeClipId === 'idle' && <span className="badge badge--success">Active</span>}
+            </div>
+            <div
+              className={`tree-item ${activeClipId === 'walk' ? 'tree-item--selected' : ''}`}
+              onClick={() => setActiveClipId('walk')}
+              style={{ cursor: 'pointer' }}
+            >
+              <Icon icon={Film} size="sm" color={activeClipId === 'walk' ? 'var(--accent)' : 'var(--warning)'} />
+              <span className="tree-item__label">🚶‍♂️ Bước đi (Walk)</span>
+              {activeClipId === 'walk' && <span className="badge badge--success">Active</span>}
+            </div>
+            <div
+              className={`tree-item ${activeClipId === 'ready' ? 'tree-item--selected' : ''}`}
+              onClick={() => setActiveClipId('ready')}
+              style={{ cursor: 'pointer' }}
+            >
+              <Icon icon={Film} size="sm" color={activeClipId === 'ready' ? 'var(--accent)' : 'var(--warning)'} />
+              <span className="tree-item__label">⚔️ Thủ thế (Ready)</span>
+              {activeClipId === 'ready' && <span className="badge badge--success">Active</span>}
             </div>
           </div>
         </Panel>

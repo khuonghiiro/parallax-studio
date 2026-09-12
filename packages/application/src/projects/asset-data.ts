@@ -13,6 +13,7 @@ import type {
   MorphTarget,
   Light,
   Shot,
+  Layer,
 } from '@parallax/contracts';
 import type { TriangulationResult } from '@parallax/core';
 
@@ -32,6 +33,7 @@ export interface AssetData {
   readonly viewSet?: ViewSet;
   readonly warpGrid?: WarpGrid;
   readonly morphTargets?: readonly MorphTarget[];
+  readonly layers?: readonly Layer[];
 }
 
 /**

@@ -45,6 +45,7 @@ export class ViewportController {
   private isDisposed: boolean = false;
 
   // Scene content group
+  private groundGroup: THREE.Group = new THREE.Group();
   private contentGroup: THREE.Group = new THREE.Group();
   private overlayGroup: THREE.Group = new THREE.Group();
 
@@ -63,26 +64,30 @@ export class ViewportController {
     });
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setClearColor(0x1a1a24, 1.0);
+    this.renderer.setClearColor(0x0a0b10, 1.0);
     this.container.appendChild(this.renderer.domElement);
 
-    // Create scene
+    // Create scene with dedicated layers
     this.scene = new THREE.Scene();
+    this.scene.add(this.groundGroup);
     this.scene.add(this.contentGroup);
     this.scene.add(this.overlayGroup);
 
-    // Setup ambient light
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+    // Studio 3-point lighting setup
+    const ambientLight = new THREE.AmbientLight(0xd4dcff, 0.85);
     this.scene.add(ambientLight);
 
-    // Setup directional light
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(200, 400, 500);
-    this.scene.add(dirLight);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.25);
+    keyLight.position.set(300, 500, 600);
+    this.scene.add(keyLight);
+
+    const rimLight = new THREE.DirectionalLight(0x6366f1, 0.65);
+    rimLight.position.set(-300, 300, -200);
+    this.scene.add(rimLight);
 
     // Create orthographic camera centered at origin
     const aspect = width / height;
-    const viewSize = 800;
+    const viewSize = 1400;
     this.camera = new THREE.OrthographicCamera(
       (-viewSize * aspect) / 2,
       (viewSize * aspect) / 2,
@@ -94,26 +99,62 @@ export class ViewportController {
     this.camera.position.set(0, 0, 1000);
     this.camera.lookAt(0, 0, 0);
 
+    this.setupGroundShadow();
     this.setupGrid();
     this.bindEvents();
     this.startRenderLoop();
+  }
+
+  private setupGroundShadow(): void {
+    if (typeof document === 'undefined') return;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const grad = ctx.createRadialGradient(128, 64, 0, 128, 64, 110);
+      grad.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
+      grad.addColorStop(0.35, 'rgba(0, 0, 0, 0.35)');
+      grad.addColorStop(0.7, 'rgba(0, 0, 0, 0.10)');
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 256, 128);
+
+      const shadowTex = new THREE.CanvasTexture(canvas);
+      const shadowGeo = new THREE.PlaneGeometry(680, 160);
+      const shadowMat = new THREE.MeshBasicMaterial({
+        map: shadowTex,
+        transparent: true,
+        depthWrite: false,
+        opacity: 0.90,
+      });
+      const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+      shadowMesh.position.set(0, -625, -0.05); // Directly anchored under character boots
+      this.groundGroup.add(shadowMesh);
+    } catch {}
   }
 
   private setupGrid(): void {
     if (this.gridHelper) {
       this.scene.remove(this.gridHelper);
     }
-    // 2D grid in XY plane rotated from XZ
-    const size = 2000;
-    const divisions = 40;
-    this.gridHelper = new THREE.GridHelper(size, divisions, 0x3a3a50, 0x272736);
+    // High-end subtle studio grid (softened to prevent birdcage visual distraction)
+    const size = 2400;
+    const divisions = 24;
+    this.gridHelper = new THREE.GridHelper(size, divisions, 0x303650, 0x181c2c);
     this.gridHelper.rotation.x = Math.PI / 2;
     this.gridHelper.position.z = -1;
+    if (this.gridHelper.material) {
+      (this.gridHelper.material as THREE.Material).transparent = true;
+      (this.gridHelper.material as THREE.Material).opacity = 0.35;
+    }
     this.gridHelper.visible = this.overlays.showGrid;
     this.scene.add(this.gridHelper);
 
-    this.axesHelper = new THREE.AxesHelper(100);
-    this.axesHelper.position.z = 0;
+    this.axesHelper = new THREE.AxesHelper(60);
+    this.axesHelper.position.z = -0.5;
     this.scene.add(this.axesHelper);
   }
 
@@ -186,7 +227,7 @@ export class ViewportController {
     const width = this.container.clientWidth || 800;
     const height = this.container.clientHeight || 600;
     const aspect = width / height;
-    const viewSize = 800 / this.zoom;
+    const viewSize = 1400 / this.zoom;
 
     this.camera.left = (-viewSize * aspect) / 2 + this.panOffset.x;
     this.camera.right = (viewSize * aspect) / 2 + this.panOffset.x;

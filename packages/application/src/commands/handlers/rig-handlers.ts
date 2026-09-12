@@ -46,12 +46,13 @@ export function handleApplyRigTemplate(
   }
 
   const { width, height } = asset.dimensions;
-  const landmarks = generateHumanoidLandmarks(width, height);
+  const pose = (payload.data?.pose as 't-pose' | 'a-pose') || 't-pose';
+  const landmarks = generateHumanoidLandmarks(width, height, pose);
   const autoRigResult = generateAutoSkeleton(landmarks);
   const skeleton = autoRigResult.hierarchy;
 
   // Compute skinning weights for each vertex in the mesh
-  const weights = computeAutoWeights(asset.mesh.vertices, skeleton, 4, 2.0);
+  const weights = computeAutoWeights(asset.mesh.vertices, skeleton, 4, 3.5);
 
   // Update asset in memory
   const updatedAsset = {
@@ -92,7 +93,11 @@ export function handleApplyRigTemplate(
 /**
  * Generate standard 2D humanoid landmarks centered on (0, 0).
  */
-function generateHumanoidLandmarks(width: number, height: number): LandmarkSet {
+function generateHumanoidLandmarks(
+  width: number,
+  height: number,
+  pose: 't-pose' | 'a-pose' = 't-pose',
+): LandmarkSet {
   const w = width / 2;
   const h = height / 2;
 
@@ -102,39 +107,49 @@ function generateHumanoidLandmarks(width: number, height: number): LandmarkSet {
     confidence: 1.0,
   });
 
+  const isTPose = pose === 't-pose';
+  const armY = isTPose ? 0.52 * h : 0.50 * h;
+  const elbowY = isTPose ? 0.52 * h : 0.22 * h;
+  const wristY = isTPose ? 0.52 * h : -0.05 * h;
+  const handY = isTPose ? 0.52 * h : -0.18 * h;
+  const shoulderX = isTPose ? 0.20 * w : 0.28 * w;
+  const elbowX = isTPose ? 0.55 * w : 0.44 * w;
+  const wristX = isTPose ? 0.82 * w : 0.47 * w;
+  const handX = isTPose ? 0.98 * w : 0.49 * w;
+
   return {
     imageWidth: width,
     imageHeight: height,
     landmarks: [
-      make('waist_center', 0, -0.05 * h),
-      make('chest_center', 0, 0.25 * h),
-      make('neck', 0, 0.55 * h),
-      make('chin', 0, 0.65 * h),
-      make('head_top', 0, 0.95 * h),
+      make('waist_center', 0, isTPose ? 0.05 * h : 0.08 * h),
+      make('chest_center', 0, isTPose ? 0.32 * h : 0.35 * h),
+      make('neck', 0, isTPose ? 0.52 * h : 0.55 * h),
+      make('chin', 0, isTPose ? 0.62 * h : 0.65 * h),
+      make('head_top', 0, isTPose ? 0.90 * h : 0.88 * h),
 
-      // Left arm (screen right from character perspective)
-      make('left_shoulder', -0.35 * w, 0.5 * h),
-      make('left_elbow', -0.55 * w, 0.2 * h),
-      make('left_wrist', -0.65 * w, -0.1 * h),
-      make('left_hand', -0.7 * w, -0.25 * h),
+      // Left arm (screen left: -x)
+      make('left_shoulder', -shoulderX, armY),
+      make('left_elbow', -elbowX, elbowY),
+      make('left_wrist', -wristX, wristY),
+      make('left_hand', -handX, handY),
 
-      // Right arm
-      make('right_shoulder', 0.35 * w, 0.5 * h),
-      make('right_elbow', 0.55 * w, 0.2 * h),
-      make('right_wrist', 0.65 * w, -0.1 * h),
-      make('right_hand', 0.7 * w, -0.25 * h),
+      // Right arm (screen right: +x)
+      make('right_shoulder', shoulderX, armY),
+      make('right_elbow', elbowX, elbowY),
+      make('right_wrist', wristX, wristY),
+      make('right_hand', handX, handY),
 
       // Left leg
-      make('left_hip', -0.2 * w, -0.1 * h),
-      make('left_knee', -0.25 * w, -0.5 * h),
-      make('left_ankle', -0.25 * w, -0.85 * h),
-      make('left_foot', -0.3 * w, -0.95 * h),
+      make('left_hip', isTPose ? -0.15 * w : -0.16 * w, isTPose ? -0.02 * h : -0.05 * h),
+      make('left_knee', isTPose ? -0.18 * w : -0.20 * w, isTPose ? -0.40 * h : -0.38 * h),
+      make('left_ankle', isTPose ? -0.20 * w : -0.23 * w, isTPose ? -0.78 * h : -0.76 * h),
+      make('left_foot', isTPose ? -0.22 * w : -0.25 * w, isTPose ? -0.92 * h : -0.92 * h),
 
       // Right leg
-      make('right_hip', 0.2 * w, -0.1 * h),
-      make('right_knee', 0.25 * w, -0.5 * h),
-      make('right_ankle', 0.25 * w, -0.85 * h),
-      make('right_foot', 0.3 * w, -0.95 * h),
+      make('right_hip', isTPose ? 0.15 * w : 0.16 * w, isTPose ? -0.02 * h : -0.05 * h),
+      make('right_knee', isTPose ? 0.18 * w : 0.20 * w, isTPose ? -0.40 * h : -0.38 * h),
+      make('right_ankle', isTPose ? 0.20 * w : 0.23 * w, isTPose ? -0.78 * h : -0.76 * h),
+      make('right_foot', isTPose ? 0.22 * w : 0.25 * w, isTPose ? -0.92 * h : -0.92 * h),
     ],
   };
 }

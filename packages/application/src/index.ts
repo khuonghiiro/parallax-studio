@@ -56,6 +56,9 @@ export {
   resetApplicationService,
 } from './service/application-service.js';
 export type { SerializableSnapshot } from './service/application-service.js';
+export {
+  startApplicationService,
+} from './service/http-server.js';
 export type {
   HttpServiceOptions,
   HttpServiceInstance,

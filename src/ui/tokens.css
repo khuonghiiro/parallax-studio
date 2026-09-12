@@ -40,63 +40,69 @@
   --sp-20: 40px;
 
   /* ── Border Radius ── */
-  --radius-sm: 3px;
-  --radius-md: 5px;
-  --radius-lg: 8px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
   --radius-full: 9999px;
 
-  /* ── Surface Colors ── */
-  --bg-app: #1a1a24;
-  --bg-panel: #22222e;
-  --bg-panel-alt: #272736;
-  --bg-surface: #2c2c3a;
-  --bg-hover: #353548;
-  --bg-active: #3d3d54;
-  --bg-selected: rgba(99, 128, 255, 0.15);
+  /* ── Surface Colors (Obsidian Studio Slate) ── */
+  --bg-app: #0a0b10;
+  --bg-panel: #11131b;
+  --bg-panel-alt: #161824;
+  --bg-surface: #1d202f;
+  --bg-hover: #262a3e;
+  --bg-active: #31364f;
+  --bg-selected: rgba(99, 102, 241, 0.18);
 
   /* ── Border Colors ── */
-  --border-subtle: #2e2e40;
-  --border-default: #3a3a50;
-  --border-strong: #4a4a64;
-  --border-focus: #6380ff;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --border-focus: #6366f1;
+
+  /* ── Shadows & Glows ── */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --glow-accent: 0 0 16px rgba(99, 102, 241, 0.35);
 
   /* ── Text Colors ── */
-  --text-primary: #e8e8f0;
-  --text-secondary: #a0a0b8;
-  --text-muted: #6c6c88;
-  --text-disabled: #4a4a60;
-  --text-inverse: #1a1a24;
+  --text-primary: #f1f2f8;
+  --text-secondary: #9aa0bc;
+  --text-muted: #5e6482;
+  --text-disabled: #3d4257;
+  --text-inverse: #0a0b10;
 
-  /* ── Accent / Brand ── */
-  --accent: #6380ff;
-  --accent-hover: #7a94ff;
-  --accent-active: #4d6bef;
-  --accent-muted: rgba(99, 128, 255, 0.2);
+  /* ── Accent / Brand (Electric Indigo) ── */
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-active: #4f46e5;
+  --accent-muted: rgba(99, 102, 241, 0.15);
 
   /* ── Semantic Colors ── */
-  --success: #3ecf8e;
-  --success-muted: rgba(62, 207, 142, 0.15);
-  --warning: #f5a623;
-  --warning-muted: rgba(245, 166, 35, 0.15);
-  --destructive: #ef5350;
-  --destructive-muted: rgba(239, 83, 80, 0.15);
-  --info: #42a5f5;
-  --info-muted: rgba(66, 165, 245, 0.15);
+  --success: #10b981;
+  --success-muted: rgba(16, 185, 129, 0.15);
+  --warning: #f59e0b;
+  --warning-muted: rgba(245, 158, 11, 0.15);
+  --destructive: #f43f5e;
+  --destructive-muted: rgba(244, 63, 94, 0.15);
+  --info: #38bdf8;
+  --info-muted: rgba(56, 189, 248, 0.15);
 
   /* ── Viewport Overlay Colors ── */
-  --overlay-mesh: rgba(99, 128, 255, 0.6);
-  --overlay-bone: rgba(62, 207, 142, 0.85);
-  --overlay-bone-selected: #f5a623;
-  --overlay-weight-hot: #ff3b30;
-  --overlay-weight-mid: #ffcc00;
-  --overlay-weight-cold: #007aff;
-  --overlay-landmark: #e040fb;
-  --overlay-pivot: #50e3c2;
+  --overlay-mesh: rgba(99, 102, 241, 0.65);
+  --overlay-bone: rgba(16, 185, 129, 0.9);
+  --overlay-bone-selected: #f59e0b;
+  --overlay-weight-hot: #f43f5e;
+  --overlay-weight-mid: #fbbf24;
+  --overlay-weight-cold: #38bdf8;
+  --overlay-landmark: #d946ef;
+  --overlay-pivot: #2dd4bf;
 
   /* ── Keyframe Colors ── */
-  --kf-default: #6380ff;
-  --kf-selected: #f5a623;
-  --kf-interpolation: rgba(99, 128, 255, 0.3);
+  --kf-default: #6366f1;
+  --kf-selected: #f59e0b;
+  --kf-interpolation: rgba(99, 102, 241, 0.3);
 
   /* ── Icon Sizes ── */
   --icon-sm: 14px;

@@ -9,7 +9,11 @@ import {
   ProjectState,
   ApplicationService,
   getApplicationService,
+  reconstructSnapshot,
+  type ProjectSnapshot,
+  type SerializableSnapshot,
 } from '@parallax/application';
+import type { CommandPayload, CommandResult } from '@parallax/contracts';
 import { startApplicationService } from '../packages/application/src/service/http-server.js';
 import {
   handleDirectorParseScript,
@@ -17,6 +21,13 @@ import {
   handleDirectorRenderPreview,
   handleDirectorExportScene,
 } from './director-tools.js';
+import {
+  CHARACTER_TOOL_DEFS,
+  handleCharacterAutoRig,
+  handleCharacterDecomposeRig,
+  handleCharacterSetExpression,
+  handleCharacterAdjustPart,
+} from './character-tools.js';
 
 export interface McpServerOptions {
   service?: ApplicationService;
@@ -37,6 +48,56 @@ export function createMcpServer(options: McpServerOptions = {}): {
   const service = options.service ?? getApplicationService();
   const bus = service.commandBus;
   const state = service.projectState;
+
+  // Register remote-relay middleware: forwards state-mutating commands to running web app
+  bus.use(async (payload, next) => {
+    if (payload.data?.__skipRemote) {
+      return next();
+    }
+
+    const candidateUrls = ['http://127.0.0.1:5173/api', 'http://127.0.0.1:3100/api'];
+    for (const baseUrl of candidateUrls) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 350);
+        const res = await fetch(`${baseUrl}/commands`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (res.ok) {
+          const remoteResult = (await res.json()) as CommandResult;
+          payload.data = { ...payload.data, __skipRemote: true };
+          await next();
+          return remoteResult;
+        }
+      } catch {
+        // Fallback
+      }
+    }
+    return next();
+  });
+
+  async function getActiveSnapshot(): Promise<ProjectSnapshot | null> {
+    const candidateUrls = ['http://127.0.0.1:5173/api', 'http://127.0.0.1:3100/api'];
+    for (const baseUrl of candidateUrls) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 350);
+        const res = await fetch(`${baseUrl}/state`, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (res.ok) {
+          const body = (await res.json()) as { status: string; snapshot: SerializableSnapshot };
+          if (body.snapshot) {
+            return reconstructSnapshot(body.snapshot);
+          }
+        }
+      } catch {}
+    }
+    return state.getSnapshot();
+  }
 
   if (options.autoStartHttp !== false) {
     startApplicationService({
@@ -251,6 +312,7 @@ export function createMcpServer(options: McpServerOptions = {}): {
             },
           },
         },
+        ...CHARACTER_TOOL_DEFS,
       ],
     };
   });
@@ -272,9 +334,29 @@ export function createMcpServer(options: McpServerOptions = {}): {
       }
 
       case 'project_get_info': {
-        const snap = state.getSnapshot();
+        const snap = await getActiveSnapshot();
+        const manifest = snap?.manifest ?? state.getManifest();
+        const revision = snap?.revision ?? state.getRevision();
+        const assetMap = snap?.assets ?? state.getSnapshot().assets;
         return {
-          content: [{ type: 'text', text: JSON.stringify(snap, null, 2) }],
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  manifest,
+                  revision,
+                  assetCount: assetMap.size,
+                  assets: Array.from(assetMap.values()).map((a) => ({
+                    id: a.id,
+                    name: a.name,
+                  })),
+                },
+                null,
+                2,
+              ),
+            },
+          ],
         };
       }
 
@@ -298,6 +380,7 @@ export function createMcpServer(options: McpServerOptions = {}): {
             dataUrl: args.dataUrl as string,
             width: (args.width as number) || 512,
             height: (args.height as number) || 512,
+            alphaData: args.alphaData as number[] | undefined,
           },
         });
         return {
@@ -306,7 +389,9 @@ export function createMcpServer(options: McpServerOptions = {}): {
       }
 
       case 'asset_list': {
-        const assets = state.getAllAssetData().map((a) => ({
+        const snap = await getActiveSnapshot();
+        const assetMap = snap?.assets ?? state.getSnapshot().assets;
+        const assets = Array.from(assetMap.values()).map((a) => ({
           id: a.id,
           name: a.name,
           dimensions: a.dimensions,
@@ -314,7 +399,7 @@ export function createMcpServer(options: McpServerOptions = {}): {
           vertexCount: a.mesh?.vertexCount ?? 0,
           triangleCount: a.mesh?.triangleCount ?? 0,
           hasRig: Boolean(a.skeleton),
-          boneCount: a.skeleton?.bones.length ?? 0,
+          boneCount: a.skeleton?.bones?.length ?? 0,
         }));
         return {
           content: [{ type: 'text', text: JSON.stringify(assets, null, 2) }],
@@ -323,7 +408,8 @@ export function createMcpServer(options: McpServerOptions = {}): {
 
       case 'mesh_get_info': {
         const assetId = args.assetId as string;
-        const asset = state.getAssetData(assetId);
+        const snap = await getActiveSnapshot();
+        const asset = snap?.assets?.get(assetId) ?? state.getAssetData(assetId);
         if (!asset || !asset.mesh) {
           return {
             isError: true,
@@ -394,7 +480,8 @@ export function createMcpServer(options: McpServerOptions = {}): {
 
       case 'rig_get_info': {
         const assetId = args.assetId as string;
-        const asset = state.getAssetData(assetId);
+        const snap = await getActiveSnapshot();
+        const asset = snap?.assets?.get(assetId) ?? state.getAssetData(assetId);
         if (!asset) {
           return {
             isError: true,
@@ -482,6 +569,28 @@ export function createMcpServer(options: McpServerOptions = {}): {
         return {
           content: [{ type: 'text', text: JSON.stringify(res, null, 2) }],
         };
+      }
+
+      case 'character_auto_rig':
+        return await handleCharacterAutoRig(bus, args);
+
+      case 'character_decompose_rig':
+        return await handleCharacterDecomposeRig(bus, args);
+
+      case 'character_set_expression': {
+        const getAsset = async (id: string) => {
+          const snap = await getActiveSnapshot();
+          return snap?.assets?.get(id) ?? state.getAssetData(id);
+        };
+        return await handleCharacterSetExpression(bus, args, getAsset);
+      }
+
+      case 'character_adjust_part': {
+        const getAsset = async (id: string) => {
+          const snap = await getActiveSnapshot();
+          return snap?.assets?.get(id) ?? state.getAssetData(id);
+        };
+        return await handleCharacterAdjustPart(bus, args, getAsset);
       }
 
       default:

@@ -27,6 +27,7 @@ export const CommandTypeSchema = z.enum([
   'set_layer_opacity',
   'set_active_view',
   'add_view_entry',
+  'set_layers',
 
   // Rig commands
   'set_landmarks',
