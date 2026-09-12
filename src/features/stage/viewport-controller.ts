@@ -282,6 +282,17 @@ export class ViewportController {
     this.updateCameraBounds();
   }
 
+  public panBy(dx: number, dy: number): void {
+    const scale = 1 / this.zoom;
+    this.panOffset.x += dx * scale;
+    this.panOffset.y += dy * scale;
+    this.updateCameraBounds();
+  }
+
+  public dollyBy(dZoom: number): void {
+    this.setZoom(this.zoom * dZoom);
+  }
+
   public resetView(): void {
     this.zoom = 1.0;
     this.panOffset.set(0, 0);

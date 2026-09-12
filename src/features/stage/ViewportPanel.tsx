@@ -21,13 +21,16 @@ import {
 import type { WorkspaceId } from '../../app/layout/MenuBar.js';
 import { DrawingCanvas } from '../draw/DrawingCanvas.js';
 import { SequenceEditor } from '../edit/SequenceEditor.js';
+import { evaluateProceduralClip, getPresetTestPose } from './procedural-clips.js';
+import { RigTestPoseBar } from './RigTestPoseBar.js';
+import { CameraControlBar } from './CameraControlBar.js';
 import './ViewportPanel.css';
 
 export interface ViewportPanelProps {
   mode: WorkspaceId;
 }
 
-export type ActiveTool = 'select' | 'move' | 'rotate' | 'scale' | 'weight-paint';
+export type ActiveTool = 'select' | 'move' | 'rotate' | 'scale' | 'weight-paint' | 'vertex-edit';
 
 /**
  * Central viewport — Three.js canvas + toolbar + overlay toggles + 2.5D stage composer.
@@ -79,6 +82,15 @@ export function ViewportPanel({
   const [cameraMode, setCameraMode] = useState<'orthographic' | 'perspective'>('orthographic');
   const [showShadows, setShowShadows] = useState<boolean>(true);
   const [showDepthPlanes, setShowDepthPlanes] = useState<boolean>(true);
+
+  // Rigging Test Pose state
+  const [isTestPose, setIsTestPose] = useState<boolean>(false);
+  const [testPoseRotations, setTestPoseRotations] = useState<Map<string, number>>(new Map());
+
+  // Compose Camera DoF state
+  const [focusZ, setFocusZ] = useState<number>(0);
+  const [aperture, setAperture] = useState<number>(0);
+  const [showCameraPath, setShowCameraPath] = useState<boolean>(false);
 
   // Auto-select first asset if none is selected and assets exist
   useEffect(() => {
@@ -213,111 +225,12 @@ export function ViewportPanel({
       built.skeletonHelper.visible = (mode === 'rig' || mode === 'draw') && !isPlaying;
     }
 
-    // Evaluate procedural or keyframed pose for preview
-    const t = currentFrame * 0.08;
-    const rotations = new Map<string, number>();
-
-    if (mode === 'animate' || isPlaying) {
-      if (activeClipId === 'idle') {
-        // 1. Natural Breathing Idle: Single harmonic biological rhythm
-        // Chest gently lifts, head counter-balances. Legs are firmly planted (ZERO wobbling).
-        const breath = Math.sin(t * 0.45) * 0.028;
-
-        rotations.set('spine', breath * 0.8);
-        rotations.set('neck', -breath * 0.35);
-        rotations.set('head', Math.sin(t * 0.25) * 0.015);
-
-        // Arms hang naturally at rest with gentle micro-follow of breath
-        rotations.set('upper_arm_l', 0.02 + breath * 0.25);
-        rotations.set('forearm_l', 0.04);
-        rotations.set('hand_l', 0);
-
-        rotations.set('upper_arm_r', -0.02 - breath * 0.25);
-        rotations.set('forearm_r', 0.04);
-        rotations.set('hand_r', 0);
-
-        // Legs are firmly planted on the ground (zero wobbling)
-        rotations.set('thigh_l', 0);
-        rotations.set('shin_l', 0);
-        rotations.set('foot_l', 0);
-        rotations.set('thigh_r', 0);
-        rotations.set('shin_r', 0);
-        rotations.set('foot_r', 0);
-      } else if (activeClipId === 'walk') {
-        // 2. Royal Knight Walk: Noble front-facing stride with coordinated smooth sway
-        // Pure harmonic curves guarantee zero popping, tearing, or limb pinching
-        const walkPhase = t * 0.9;
-        const stride = Math.sin(walkPhase);
-
-        // Smooth subtle weight shift
-        rotations.set('thigh_l', stride * 0.04);
-        rotations.set('shin_l', (1 - Math.cos(walkPhase)) * 0.025);
-        rotations.set('foot_l', -stride * 0.02);
-
-        rotations.set('thigh_r', -stride * 0.04);
-        rotations.set('shin_r', (1 - Math.cos(walkPhase + Math.PI)) * 0.025);
-        rotations.set('foot_r', stride * 0.02);
-
-        // Smooth arm counter-swing
-        rotations.set('upper_arm_l', -stride * 0.05);
-        rotations.set('forearm_l', 0.02 + (1 - Math.cos(walkPhase)) * 0.02);
-        rotations.set('hand_l', 0);
-
-        rotations.set('upper_arm_r', stride * 0.05);
-        rotations.set('forearm_r', -0.02 - (1 - Math.cos(walkPhase + Math.PI)) * 0.02);
-        rotations.set('hand_r', 0);
-
-        // Torso vertical bounce (two beats per full cycle)
-        rotations.set('spine', Math.sin(walkPhase * 2) * 0.008);
-        rotations.set('neck', 0);
-        rotations.set('head', -Math.sin(walkPhase * 2) * 0.005);
-      } else if (activeClipId === 'ready') {
-        // 3. Combat Ready Stance: Heroic guard posture framing chest & sword hilt
-        const breath = Math.sin(t * 0.5) * 0.012;
-
-        // Grounded, braced stance
-        rotations.set('thigh_l', -0.02);
-        rotations.set('shin_l', 0.02);
-        rotations.set('foot_l', 0);
-        rotations.set('thigh_r', 0.02);
-        rotations.set('shin_r', -0.02);
-        rotations.set('foot_r', 0);
-
-        // Arms poised inward in heroic combat guard
-        rotations.set('upper_arm_l', 0.04);
-        rotations.set('forearm_l', 0.08);
-        rotations.set('hand_l', 0.02);
-
-        rotations.set('upper_arm_r', -0.04);
-        rotations.set('forearm_r', -0.08);
-        rotations.set('hand_r', -0.02);
-
-        // Alert torso posture
-        rotations.set('spine', -0.02 + breath * 0.5);
-        rotations.set('neck', 0.01);
-        rotations.set('head', 0.015 - breath * 0.25);
-      }
-    } else {
-      // Rest pose in setup mode
-      rotations.set('spine', 0);
-      rotations.set('neck', 0);
-      rotations.set('head', 0);
-      rotations.set('upper_arm_l', 0);
-      rotations.set('forearm_l', 0);
-      rotations.set('hand_l', 0);
-      rotations.set('upper_arm_r', 0);
-      rotations.set('forearm_r', 0);
-      rotations.set('hand_r', 0);
-      rotations.set('thigh_l', 0);
-      rotations.set('shin_l', 0);
-      rotations.set('foot_l', 0);
-      rotations.set('thigh_r', 0);
-      rotations.set('shin_r', 0);
-      rotations.set('foot_r', 0);
-    }
+    const rotations = isTestPose && mode === 'rig'
+      ? testPoseRotations
+      : evaluateProceduralClip(activeClipId, currentFrame, mode, isPlaying);
 
     applyPoseToSkeleton(built.skeleton, rotations);
-  }, [currentFrame, mode, isPlaying, activeClipId]);
+  }, [currentFrame, mode, isPlaying, activeClipId, isTestPose, testPoseRotations]);
 
   // Animation timeline advance when playing
   useEffect(() => {
@@ -518,15 +431,26 @@ export function ViewportPanel({
             onClick={() => setActiveTool('scale')}
           />
           {mode === 'rig' && (
-            <Button
-              icon={Paintbrush} iconOnly size="sm" variant="ghost"
-              title="Weight Paint Brush"
-              active={activeTool === 'weight-paint'}
-              onClick={() => {
-                setActiveTool('weight-paint');
-                setOverlaysState((p) => ({ ...p, showHeatmap: true }));
-              }}
-            />
+            <>
+              <Button
+                icon={Paintbrush} iconOnly size="sm" variant="ghost"
+                title="Weight Paint Brush"
+                active={activeTool === 'weight-paint'}
+                onClick={() => {
+                  setActiveTool('weight-paint');
+                  setOverlaysState((p) => ({ ...p, showHeatmap: true }));
+                }}
+              />
+              <Button
+                icon={Pentagon} iconOnly size="sm" variant="ghost"
+                title="Chỉnh đỉnh lưới thủ công (Vertex Edit)"
+                active={activeTool === 'vertex-edit'}
+                onClick={() => {
+                  setActiveTool('vertex-edit');
+                  setOverlaysState((p) => ({ ...p, showWireframe: true }));
+                }}
+              />
+            </>
           )}
           {mode === 'rig' && activeTool === 'weight-paint' && (
             <div
@@ -689,26 +613,65 @@ export function ViewportPanel({
           </div>
         )}
 
-        {mode === 'compose' && (
-          <ComposeStagingBar
-            instances={instances}
-            selectedInstanceId={selectedInstanceId}
-            onSelectInstance={setSelectedInstanceId}
-            onStageAsset={handleStageAsset}
-            canStageAsset={Boolean(selectedAssetId && asset)}
-            selectedAssetName={asset?.name}
-            cameraMode={cameraMode}
-            onToggleCameraMode={() =>
-              setCameraMode((prev) => (prev === 'perspective' ? 'orthographic' : 'perspective'))
-            }
-            onSetOrbitView={() => controllerRef.current?.setOrbitAngle(30, 15)}
-            onResetFrontView={() => controllerRef.current?.resetView()}
-            showDepthPlanes={showDepthPlanes}
-            onToggleDepthPlanes={() => setShowDepthPlanes((prev) => !prev)}
-            showShadows={showShadows}
-            onToggleShadows={() => setShowShadows((prev) => !prev)}
-            onUpdateInstanceDepth={handleUpdateInstanceDepth}
+        {mode === 'rig' && (
+          <RigTestPoseBar
+            isTestPose={isTestPose}
+            onToggleTestPose={() => {
+              setIsTestPose((prev) => {
+                const next = !prev;
+                setTestPoseRotations(next ? getPresetTestPose('wave') : new Map());
+                return next;
+              });
+            }}
+            onResetPose={() => setTestPoseRotations(new Map())}
+            onApplyPresetPose={(preset) => setTestPoseRotations(getPresetTestPose(preset))}
+            selectedBoneId={selectedBoneId}
+            currentRotation={selectedBoneId ? (testPoseRotations.get(selectedBoneId) ?? 0) : 0}
+            onRotateBone={(angle) => {
+              if (!selectedBoneId) return;
+              setTestPoseRotations((prev) => {
+                const next = new Map(prev);
+                next.set(selectedBoneId, angle);
+                return next;
+              });
+            }}
           />
+        )}
+
+        {mode === 'compose' && (
+          <>
+            <CameraControlBar
+              onPan={(dx) => controllerRef.current?.panBy(dx, 0)}
+              onCrane={(dy) => controllerRef.current?.panBy(0, dy)}
+              onDolly={(dz) => controllerRef.current?.dollyBy(dz < 0 ? 1.15 : 0.85)}
+              onResetCamera={() => controllerRef.current?.resetView()}
+              focusZ={focusZ}
+              onFocusZChange={setFocusZ}
+              aperture={aperture}
+              onApertureChange={setAperture}
+              showPath={showCameraPath}
+              onToggleShowPath={() => setShowCameraPath((p) => !p)}
+            />
+            <ComposeStagingBar
+              instances={instances}
+              selectedInstanceId={selectedInstanceId}
+              onSelectInstance={setSelectedInstanceId}
+              onStageAsset={handleStageAsset}
+              canStageAsset={Boolean(selectedAssetId && asset)}
+              selectedAssetName={asset?.name}
+              cameraMode={cameraMode}
+              onToggleCameraMode={() =>
+                setCameraMode((prev) => (prev === 'perspective' ? 'orthographic' : 'perspective'))
+              }
+              onSetOrbitView={() => controllerRef.current?.setOrbitAngle(30, 15)}
+              onResetFrontView={() => controllerRef.current?.resetView()}
+              showDepthPlanes={showDepthPlanes}
+              onToggleDepthPlanes={() => setShowDepthPlanes((prev) => !prev)}
+              showShadows={showShadows}
+              onToggleShadows={() => setShowShadows((prev) => !prev)}
+              onUpdateInstanceDepth={handleUpdateInstanceDepth}
+            />
+          </>
         )}
       </div>
     </div>
