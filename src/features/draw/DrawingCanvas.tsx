@@ -2,9 +2,20 @@ import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { useEditor } from '../../app/EditorContext.js';
 import { LayerStackPanel, type CanvasLayer } from './LayerStackPanel.js';
 import { CelStrip, type CelItem } from './CelStrip.js';
+import {
+  type CelData,
+  snapshotLayers,
+  restoreLayersFromSnapshot,
+} from './cel-manager.js';
 import { renderOnionSkin } from './onion-skin.js';
 import { floodFill, hexToRgba } from './flood-fill.js';
 import { DrawingToolbar } from './DrawingToolbar.js';
+import { MannequinModal } from './MannequinModal.js';
+import {
+  renderMannequinPreset,
+  type MannequinPresetId,
+  type MannequinPose,
+} from './mannequin-presets.js';
 import {
   type Point,
   type BrushType,
@@ -22,12 +33,6 @@ const CANVAS_WIDTH = 600;
 const CANVAS_HEIGHT = 600;
 
 export type DrawTool = 'brush' | 'eraser' | 'eyedropper' | 'fill';
-
-interface CelData {
-  id: string;
-  name: string;
-  layersData: Record<string, ImageData>;
-}
 
 function createBlankCanvas(w = CANVAS_WIDTH, h = CANVAS_HEIGHT): HTMLCanvasElement {
   const c = document.createElement('canvas');
@@ -52,6 +57,7 @@ export function DrawingCanvas(): React.JSX.Element {
   const [size, setSize] = useState<number>(12);
   const [symmetry, setSymmetry] = useState<boolean>(false);
   const [lightTable, setLightTable] = useState<boolean>(false);
+  const [isMannequinModalOpen, setIsMannequinModalOpen] = useState<boolean>(false);
 
   // Zoom and Pan transform
   const [transform, setTransform] = useState<ViewportTransform>({
@@ -213,14 +219,7 @@ export function DrawingCanvas(): React.JSX.Element {
   const saveActiveCelSnapshot = useCallback(() => {
     const activeCel = cels[activeCelIndex];
     if (!activeCel) return;
-    const snapData: Record<string, ImageData> = {};
-    for (const l of layers) {
-      const ctx = l.canvas.getContext('2d');
-      if (ctx) {
-        snapData[l.id] = ctx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      }
-    }
-    activeCel.layersData = snapData;
+    activeCel.layersData = snapshotLayers(layers, CANVAS_WIDTH, CANVAS_HEIGHT);
   }, [cels, activeCelIndex, layers]);
 
   // Switch cel
@@ -228,20 +227,7 @@ export function DrawingCanvas(): React.JSX.Element {
     if (index === activeCelIndex || index < 0 || index >= cels.length) return;
     saveActiveCelSnapshot();
     setActiveCelIndex(index);
-
-    const targetCel = cels[index];
-    if (!targetCel) return;
-
-    for (const l of layers) {
-      const ctx = l.canvas.getContext('2d');
-      if (ctx) {
-        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-        const data = targetCel.layersData[l.id];
-        if (data) {
-          ctx.putImageData(data, 0, 0);
-        }
-      }
-    }
+    restoreLayersFromSnapshot(layers, cels[index]?.layersData, CANVAS_WIDTH, CANVAS_HEIGHT);
     compositeLayers();
   }, [activeCelIndex, cels, saveActiveCelSnapshot, layers, compositeLayers]);
 
@@ -250,13 +236,10 @@ export function DrawingCanvas(): React.JSX.Element {
     saveActiveCelSnapshot();
     const newId = `cel-${Date.now().toString(36)}`;
     const newName = `Cel ${cels.length + 1}`;
-    const newCel: CelData = { id: newId, name: newName, layersData: {} };
-
     for (const l of layers) {
-      const ctx = l.canvas.getContext('2d');
-      ctx?.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      l.canvas.getContext('2d')?.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     }
-    setCels((prev) => [...prev, newCel]);
+    setCels((prev) => [...prev, { id: newId, name: newName, layersData: {} }]);
     setActiveCelIndex(cels.length);
     compositeLayers();
   }, [saveActiveCelSnapshot, cels.length, layers, compositeLayers]);
@@ -267,16 +250,8 @@ export function DrawingCanvas(): React.JSX.Element {
     const activeCel = cels[activeCelIndex];
     const newId = `cel-${Date.now().toString(36)}`;
     const newName = `${activeCel?.name || 'Cel'} (Copy)`;
-    const copySnapData: Record<string, ImageData> = {};
-
-    for (const l of layers) {
-      const ctx = l.canvas.getContext('2d');
-      if (ctx) {
-        copySnapData[l.id] = ctx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      }
-    }
-    const newCel: CelData = { id: newId, name: newName, layersData: copySnapData };
-    setCels((prev) => [...prev, newCel]);
+    const copySnapData = snapshotLayers(layers, CANVAS_WIDTH, CANVAS_HEIGHT);
+    setCels((prev) => [...prev, { id: newId, name: newName, layersData: copySnapData }]);
     setActiveCelIndex(cels.length);
   }, [saveActiveCelSnapshot, cels, activeCelIndex, layers]);
 
@@ -534,43 +509,46 @@ export function DrawingCanvas(): React.JSX.Element {
     img.src = currentAsset.imageDataUrl;
   }, [currentAsset, activeLayer, compositeLayers, pushHistory]);
 
+  // Apply Mannequin Base Preset
+  const handleApplyMannequin = useCallback(
+    (
+      presetId: MannequinPresetId,
+      pose: MannequinPose,
+      targetLayerType: 'sketch' | 'active',
+      showJoints: boolean,
+    ) => {
+      let target = activeLayer;
+      if (targetLayerType === 'sketch') {
+        const sketchLayer = layers.find((l) => l.id === 'layer-bg') || layers[0];
+        if (sketchLayer) {
+          target = sketchLayer;
+          setActiveLayerId(sketchLayer.id);
+          setLightTable(true);
+        }
+      }
+
+      if (!target || target.locked) return;
+      const ctx = target.canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      renderMannequinPreset(ctx, presetId, CANVAS_WIDTH, CANVAS_HEIGHT, {
+        pose,
+        color,
+        showJoints,
+        alpha: 0.85,
+      });
+
+      compositeLayers();
+      pushHistory();
+    },
+    [activeLayer, layers, color, compositeLayers, pushHistory],
+  );
+
   // Draw sample humanoid character
   const handleDrawSample = useCallback(() => {
-    if (!activeLayer || activeLayer.locked) return;
-    const ctx = activeLayer.canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    ctx.fillStyle = color;
-    const cx = CANVAS_WIDTH / 2;
-    const cy = CANVAS_HEIGHT / 2;
-
-    // Head & Neck
-    ctx.beginPath();
-    ctx.arc(cx, cy - 120, 50, 0, Math.PI * 2);
-    ctx.roundRect(cx - 18, cy - 80, 36, 30, 4);
-    ctx.fill();
-
-    // Torso
-    ctx.beginPath();
-    ctx.roundRect(cx - 50, cy - 65, 100, 160, 16);
-    ctx.fill();
-
-    // Left & Right Arms (attached to shoulders)
-    ctx.beginPath();
-    ctx.roundRect(cx - 85, cy - 60, 38, 145, 12);
-    ctx.roundRect(cx + 47, cy - 60, 38, 145, 12);
-    ctx.fill();
-
-    // Left & Right Legs
-    ctx.beginPath();
-    ctx.roundRect(cx - 45, cy + 90, 38, 180, 14);
-    ctx.roundRect(cx + 7, cy + 90, 38, 180, 14);
-    ctx.fill();
-
-    compositeLayers();
-    pushHistory();
-  }, [activeLayer, color, compositeLayers, pushHistory]);
+    handleApplyMannequin('hero-male', 'a-pose', 'active', false);
+  }, [handleApplyMannequin]);
 
   // Send composite to Rig with Auto-Skeleton & Scene Staging
   const handleSendToRig = async () => {
@@ -695,10 +673,18 @@ export function DrawingCanvas(): React.JSX.Element {
         onRedo={handleRedo}
         onClear={handleClear}
         onDrawSample={handleDrawSample}
+        onOpenMannequinModal={() => setIsMannequinModalOpen(true)}
         onSendToRig={handleSendToRig}
         isExporting={isExporting}
         currentAssetName={currentAsset?.name}
         onLoadAssetImage={currentAsset?.imageDataUrl ? handleLoadAssetImage : undefined}
+      />
+
+      {/* Mannequin Presets Selection Modal */}
+      <MannequinModal
+        isOpen={isMannequinModalOpen}
+        onClose={() => setIsMannequinModalOpen(false)}
+        onApplyPreset={handleApplyMannequin}
       />
 
       {/* Main Body: Center Viewport + Right Layer Stack */}

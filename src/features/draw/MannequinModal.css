@@ -1,0 +1,242 @@
+/* ── Mannequin Presets Modal Styles ── */
+.mannequin-modal__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.mannequin-modal {
+  width: 580px;
+  max-width: 95vw;
+  background: var(--bg-surface, #141724);
+  border: 1px solid var(--border-color, #272d42);
+  border-radius: 12px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--text-primary, #f1f5f9);
+  font-family: inherit;
+}
+
+.mannequin-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color, #272d42);
+  background: var(--bg-surface-elevated, #1a1e2f);
+}
+
+.mannequin-modal__title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mannequin-modal__icon {
+  color: var(--accent, #6366f1);
+  display: flex;
+  align-items: center;
+}
+
+.mannequin-modal__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.mannequin-modal__close {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #94a3b8);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s ease;
+}
+
+.mannequin-modal__close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #ffffff);
+}
+
+.mannequin-modal__body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  max-height: 75vh;
+}
+
+.mannequin-modal__intro {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary, #94a3b8);
+  line-height: 1.5;
+}
+
+.mannequin-modal__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.mannequin-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  background: var(--bg-card, #1c2136);
+  border: 1px solid var(--border-color, #272d42);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.mannequin-card:hover {
+  border-color: var(--accent, #6366f1);
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.mannequin-card--selected {
+  border-color: var(--accent, #6366f1);
+  background: rgba(99, 102, 241, 0.12);
+  box-shadow: 0 0 0 1px var(--accent, #6366f1);
+}
+
+.mannequin-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mannequin-card__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+}
+
+.mannequin-card__badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.2);
+  color: var(--accent, #818cf8);
+  font-weight: 500;
+}
+
+.mannequin-card__desc {
+  font-size: 11px;
+  color: var(--text-secondary, #94a3b8);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.mannequin-modal__options {
+  background: var(--bg-surface-elevated, #1a1e2f);
+  border: 1px solid var(--border-color, #272d42);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mannequin-modal__option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.mannequin-modal__label {
+  color: var(--text-secondary, #94a3b8);
+}
+
+.mannequin-modal__pose-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-card, #1c2136);
+  padding: 2px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #272d42);
+}
+
+.mannequin-modal__pose-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mannequin-modal__pose-btn--active {
+  background: var(--accent, #6366f1);
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.mannequin-modal__checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-primary, #f1f5f9);
+}
+
+.mannequin-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-color, #272d42);
+  background: var(--bg-surface-elevated, #1a1e2f);
+}
+
+.mannequin-modal__btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.mannequin-modal__btn--secondary {
+  background: var(--bg-card, #1c2136);
+  border-color: var(--border-color, #272d42);
+  color: var(--text-secondary, #94a3b8);
+}
+
+.mannequin-modal__btn--secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #ffffff);
+}
+
+.mannequin-modal__btn--primary {
+  background: var(--accent, #6366f1);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
+}
+
+.mannequin-modal__btn--primary:hover {
+  background: #4f46e5;
+}

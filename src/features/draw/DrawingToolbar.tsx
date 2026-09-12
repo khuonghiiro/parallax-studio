@@ -17,6 +17,7 @@ import {
   PenTool,
   Feather,
   Highlighter,
+  User,
 } from 'lucide-react';
 import type { BrushType } from './stroke-smoother.js';
 import type { DrawTool } from './DrawingCanvas.js';
@@ -54,6 +55,7 @@ export interface DrawingToolbarProps {
   isExporting: boolean;
   currentAssetName?: string;
   onLoadAssetImage?: () => void;
+  onOpenMannequinModal?: () => void;
 }
 
 /**
@@ -86,6 +88,7 @@ export function DrawingToolbar({
   isExporting,
   currentAssetName,
   onLoadAssetImage,
+  onOpenMannequinModal,
 }: DrawingToolbarProps): React.JSX.Element {
   return (
     <div className="drawing-toolbar-pro">
@@ -295,6 +298,16 @@ export function DrawingToolbar({
             title={`Nạp ảnh của '${currentAssetName}' lên canvas để vẽ đè`}
           >
             <Upload size={11} /> Nạp {currentAssetName}
+          </button>
+        )}
+
+        {onOpenMannequinModal && (
+          <button
+            className="drawing-toolbar-pro__btn"
+            onClick={onOpenMannequinModal}
+            title="Chọn phôi mẫu cơ thể 2D chuẩn tỷ lệ giải phẫu (Nam, Nữ, Chibi, Quái thú)"
+          >
+            <User size={11} /> Phôi mẫu
           </button>
         )}
 
