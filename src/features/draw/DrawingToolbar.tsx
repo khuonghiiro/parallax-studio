@@ -18,6 +18,7 @@ import {
   Feather,
   Highlighter,
   User,
+  Scissors,
 } from 'lucide-react';
 import type { BrushType } from './stroke-smoother.js';
 import type { DrawTool } from './DrawingCanvas.js';
@@ -56,6 +57,7 @@ export interface DrawingToolbarProps {
   currentAssetName?: string;
   onLoadAssetImage?: () => void;
   onOpenMannequinModal?: () => void;
+  onOpenCutoutSlicerModal?: () => void;
 }
 
 /**
@@ -89,6 +91,7 @@ export function DrawingToolbar({
   currentAssetName,
   onLoadAssetImage,
   onOpenMannequinModal,
+  onOpenCutoutSlicerModal,
 }: DrawingToolbarProps): React.JSX.Element {
   return (
     <div className="drawing-toolbar-pro">
@@ -308,6 +311,16 @@ export function DrawingToolbar({
             title="Chọn phôi mẫu cơ thể 2D chuẩn tỷ lệ giải phẫu (Nam, Nữ, Chibi, Quái thú)"
           >
             <User size={11} /> Phôi mẫu
+          </button>
+        )}
+
+        {onOpenCutoutSlicerModal && (
+          <button
+            className="drawing-toolbar-pro__btn"
+            onClick={onOpenCutoutSlicerModal}
+            title="Tách nhân vật thành các bộ phận rời rạc (Cutout Puppet) & sinh prompt AI"
+          >
+            <Scissors size={11} /> Tách bộ phận
           </button>
         )}
 

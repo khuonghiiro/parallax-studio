@@ -1,0 +1,436 @@
+/* Parallax Studio - Cutout Slicer Modal Styles */
+
+.cutout-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.cutout-modal-content {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  width: 900px;
+  max-width: 95vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.cutout-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #334155;
+  background: #0f172a;
+}
+
+.cutout-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #38bdf8;
+}
+
+.cutout-modal-close-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.cutout-modal-close-btn:hover {
+  background: #334155;
+  color: #f8fafc;
+}
+
+/* Tabs */
+.cutout-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+}
+
+.cutout-tab-btn {
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.cutout-tab-btn:hover {
+  color: #f8fafc;
+  border-color: #475569;
+}
+
+.cutout-tab-btn--active {
+  background: #0284c7;
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+.cutout-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Controls Bar */
+.cutout-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #0f172a;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.cutout-control-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.cutout-radio-group {
+  display: flex;
+  gap: 4px;
+  background: #1e293b;
+  padding: 2px;
+  border-radius: 6px;
+  border: 1px solid #334155;
+}
+
+.cutout-radio-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cutout-radio-btn--active {
+  background: #38bdf8;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.cutout-slider-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.cutout-slider {
+  width: 100px;
+  accent-color: #38bdf8;
+}
+
+/* Parts Grid */
+.cutout-parts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.cutout-part-card {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+.cutout-part-card:hover {
+  border-color: #38bdf8;
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.15);
+}
+
+.cutout-part-thumb {
+  width: 70px;
+  height: 70px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.cutout-part-thumb canvas,
+.cutout-part-thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.cutout-part-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cutout-part-name-vi {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cutout-part-name-en {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.cutout-part-meta {
+  display: flex;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.cutout-badge {
+  background: #1e293b;
+  border: 1px solid #475569;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #38bdf8;
+}
+
+/* AI Prompts Tab */
+.cutout-ai-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cutout-ai-settings {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cutout-input-box {
+  flex: 1;
+  min-width: 250px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #f8fafc;
+  font-size: 13px;
+}
+
+.cutout-input-box:focus {
+  outline: none;
+  border-color: #38bdf8;
+}
+
+.cutout-select {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #f8fafc;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cutout-prompt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.cutout-prompt-item {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.cutout-prompt-content {
+  flex: 1;
+}
+
+.cutout-prompt-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #38bdf8;
+  margin-bottom: 4px;
+}
+
+.cutout-prompt-text {
+  font-size: 12px;
+  color: #cbd5e1;
+  line-height: 1.5;
+  background: #1e293b;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-family: monospace;
+  word-break: break-word;
+}
+
+.cutout-copy-btn {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.cutout-copy-btn:hover {
+  background: #334155;
+  color: #f8fafc;
+  border-color: #38bdf8;
+}
+
+/* Assembler Tab */
+.cutout-assembler-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.cutout-assembler-preview {
+  width: 320px;
+  height: 320px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.cutout-assembler-preview canvas {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.cutout-assembler-parts {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.cutout-upload-item {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Footer */
+.cutout-modal-footer {
+  padding: 14px 20px;
+  border-top: 1px solid #334155;
+  background: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cutout-modal-footer-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.cutout-modal-footer-btn--primary {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #38bdf8;
+}
+
+.cutout-modal-footer-btn--primary:hover {
+  background: #0369a1;
+}
+
+.cutout-modal-footer-btn--secondary {
+  background: #1e293b;
+  color: #cbd5e1;
+  border-color: #334155;
+}
+
+.cutout-modal-footer-btn--secondary:hover {
+  background: #334155;
+  color: #f8fafc;
+}

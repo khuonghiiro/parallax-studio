@@ -11,6 +11,13 @@ import { renderOnionSkin } from './onion-skin.js';
 import { floodFill, hexToRgba } from './flood-fill.js';
 import { DrawingToolbar } from './DrawingToolbar.js';
 import { MannequinModal } from './MannequinModal.js';
+import { CutoutSlicerModal } from './CutoutSlicerModal.js';
+import type { CutoutPart } from './cutout-slicer.js';
+import {
+  createBlankCanvas,
+  convertPartsToCanvasLayers,
+  exportCanvasToRig,
+} from './layer-ops.js';
 import {
   renderMannequinPreset,
   type MannequinPresetId,
@@ -34,18 +41,6 @@ const CANVAS_HEIGHT = 600;
 
 export type DrawTool = 'brush' | 'eraser' | 'eyedropper' | 'fill';
 
-function createBlankCanvas(w = CANVAS_WIDTH, h = CANVAS_HEIGHT): HTMLCanvasElement {
-  const c = document.createElement('canvas');
-  c.width = w;
-  c.height = h;
-  const ctx = c.getContext('2d');
-  if (ctx) {
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-  }
-  return c;
-}
-
 export function DrawingCanvas(): React.JSX.Element {
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   const onionCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -58,6 +53,7 @@ export function DrawingCanvas(): React.JSX.Element {
   const [symmetry, setSymmetry] = useState<boolean>(false);
   const [lightTable, setLightTable] = useState<boolean>(false);
   const [isMannequinModalOpen, setIsMannequinModalOpen] = useState<boolean>(false);
+  const [isCutoutSlicerModalOpen, setIsCutoutSlicerModalOpen] = useState<boolean>(false);
 
   // Zoom and Pan transform
   const [transform, setTransform] = useState<ViewportTransform>({
@@ -551,88 +547,46 @@ export function DrawingCanvas(): React.JSX.Element {
   }, [handleApplyMannequin]);
 
   // Send composite to Rig with Auto-Skeleton & Scene Staging
-  const handleSendToRig = async () => {
-    const mainCanvas = mainCanvasRef.current;
-    if (!mainCanvas) return;
-    compositeLayers();
+  const handleApplyPartsAsLayers = (parts: CutoutPart[]) => {
+    if (parts.length === 0) return;
+    const newLayers = convertPartsToCanvasLayers(parts, CANVAS_WIDTH, CANVAS_HEIGHT);
+    setLayers(newLayers);
+    setActiveLayerId(newLayers[0]?.id || 'layer-ink');
+    pushHistory();
+    requestAnimationFrame(compositeLayers);
+  };
 
-    const ctx = mainCanvas.getContext('2d');
-    if (!ctx) return;
-
-    const imgData = ctx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    const alphaData: number[] = [];
-    let hasDrawnPixels = false;
-
-    for (let i = 3; i < imgData.data.length; i += 4) {
-      const alpha = imgData.data[i]!;
-      alphaData.push(alpha);
-      if (alpha > 10) hasDrawnPixels = true;
+  const handleApplyCompositeToCanvas = (compCanvas: HTMLCanvasElement) => {
+    const act = layers.find((l) => l.id === activeLayerId) || layers[0];
+    if (!act) return;
+    const ctx = act.canvas.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.drawImage(compCanvas, 0, 0);
+      pushHistory();
+      compositeLayers();
     }
+  };
 
-    if (!hasDrawnPixels) {
-      alert('Vui lòng vẽ nhân vật hoặc hình dạng trước khi chuyển sang Rig!');
-      return;
+  const handleSendToRig = async (overrideCanvas?: HTMLCanvasElement) => {
+    const targetCanvas = overrideCanvas || mainCanvasRef.current;
+    if (!targetCanvas) return;
+    if (!overrideCanvas) {
+      compositeLayers();
     }
 
     setIsExporting(true);
     try {
-      const dataUrl = mainCanvas.toDataURL('image/png');
-      const timeStr = new Date().toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
+      await exportCanvasToRig({
+        canvas: targetCanvas,
+        currentAssetName: currentAsset?.name,
+        dispatch,
+        projectState,
+        setSelectedAssetId,
+        setSelectedInstanceId,
+        setWorkspace,
+        setMode,
       });
-      const assetName = currentAsset ? `${currentAsset.name} (Cel)` : `Hand-drawn Cel ${timeStr}`;
-
-      // 1. Import image and triangulate mesh
-      const result = await dispatch({
-        type: 'import_image',
-        domain: 'asset',
-        data: {
-          name: assetName,
-          dataUrl,
-          width: CANVAS_WIDTH,
-          height: CANVAS_HEIGHT,
-          alphaData,
-        },
-      });
-
-      if (result.status === 'success' && result.entityId) {
-        const assetId = result.entityId;
-        setSelectedAssetId(assetId);
-
-        // 2. Automatically generate humanoid skeleton & compute skinning weights
-        await dispatch({
-          type: 'apply_rig_template',
-          domain: 'rig',
-          targetId: assetId,
-          data: { assetId, template: 'humanoid' },
-        });
-
-        // 3. Automatically stage character on 2.5D scene
-        const sceneData = projectState.getAllSceneData()[0];
-        const sceneId = sceneData?.id ?? 'scene-default';
-        const instRes = await dispatch({
-          type: 'add_instance',
-          domain: 'scene',
-          data: {
-            sceneId,
-            assetId,
-            name: assetName,
-            position: { x: 0, y: 0 },
-            depth: 0,
-            scale: 1,
-            rotation: 0,
-          },
-        });
-        if (instRes.status === 'success' && instRes.entityId) {
-          setSelectedInstanceId(instRes.entityId);
-        }
-
-        // 4. Switch to Rig workspace
-        if (setWorkspace) setWorkspace('rig');
-        if (setMode) setMode('rig');
-      }
     } finally {
       setIsExporting(false);
     }
@@ -674,7 +628,8 @@ export function DrawingCanvas(): React.JSX.Element {
         onClear={handleClear}
         onDrawSample={handleDrawSample}
         onOpenMannequinModal={() => setIsMannequinModalOpen(true)}
-        onSendToRig={handleSendToRig}
+        onOpenCutoutSlicerModal={() => setIsCutoutSlicerModalOpen(true)}
+        onSendToRig={() => handleSendToRig()}
         isExporting={isExporting}
         currentAssetName={currentAsset?.name}
         onLoadAssetImage={currentAsset?.imageDataUrl ? handleLoadAssetImage : undefined}
@@ -685,6 +640,16 @@ export function DrawingCanvas(): React.JSX.Element {
         isOpen={isMannequinModalOpen}
         onClose={() => setIsMannequinModalOpen(false)}
         onApplyPreset={handleApplyMannequin}
+      />
+
+      {/* Cutout Puppet Slicer & AI Part Prompts Modal */}
+      <CutoutSlicerModal
+        isOpen={isCutoutSlicerModalOpen}
+        onClose={() => setIsCutoutSlicerModalOpen(false)}
+        sourceCanvas={mainCanvasRef.current}
+        onApplyPartsAsLayers={handleApplyPartsAsLayers}
+        onApplyCompositeToCanvas={handleApplyCompositeToCanvas}
+        onSendCompositeToRig={(canvas) => handleSendToRig(canvas)}
       />
 
       {/* Main Body: Center Viewport + Right Layer Stack */}
